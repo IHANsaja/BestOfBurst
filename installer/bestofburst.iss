@@ -5,7 +5,7 @@
 
 #define AppName "BestOfBurst"
 #ifndef AppVersion
-  #define AppVersion "0.2.0"
+  #define AppVersion "0.2.1"
 #endif
 #define AppExe "bestofburst.exe"
 
@@ -31,6 +31,9 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 UninstallDisplayIcon={app}\{#AppExe}
+SetupIconFile=..\assets\logo\bestofburst.ico
+WizardImageFile=wizard-large-100.bmp,wizard-large-200.bmp
+WizardSmallImageFile=wizard-small-100.bmp,wizard-small-200.bmp
 UninstallDisplayName={#AppName}
 
 [Languages]

@@ -548,7 +548,7 @@ pub fn logo_cell(ui: &mut Ui) -> bool {
     if resp.hovered() {
         ui.painter().rect_filled(rect, 0.0, theme::RULE_DARK);
     }
-    marks::wordmark(ui, pos2(rect.min.x + 20.0, rect.center().y), theme::TABLE, theme::SAFELIGHT);
+    marks::wordmark(ui, pos2(rect.min.x + 18.0, rect.center().y), theme::TABLE, true);
     theme::focus_ring(ui, &resp);
     cell_rule(ui);
     resp.clicked()

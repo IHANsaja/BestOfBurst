@@ -451,3 +451,19 @@ Glim is BestOfBurst's own original mascot: a small lens-hood body with a **camer
 
 - **Tauri (MVP):** copy section 2.5 into `theme.css`. Toggle night with `document.documentElement.dataset.table = 'night'` and persist the choice in the app's JSON state.
 - **egui (prototype):** map the semantic tokens to `egui::Visuals`: `panel_fill = surface`, `override_text_color = on_surface`, `selection.stroke = cyan 2.5`, `widgets.*.rounding = 0`, `window_shadow = none`. Draw the marks with `Painter::add(Shape::CubicBezier)` using the reference paths in section 5.
+
+---
+
+## 13. Logo
+
+The BestOfBurst mark is **the burst**: twelve tapered frames radiating from Glim's aperture eye, with one frame lit and circled by the keeper loop. It says "the best of the burst" in the same language as the marks.
+
+| Version | Ground | Frames | Lit frame + loop | Eye | Use |
+|---------|--------|--------|------------------|-----|-----|
+| **F1 darkroom** (`assets/logo/bestofburst.svg`) | `#121211` | `#5C5A55` | Safelight `#FF5A40` | `#E6E4DE` ring, safelight pupil | App icon, exe, taskbar, installer, header chrome, night table |
+| **F2 light table** (`assets/logo/bestofburst-light.svg`) | `#E6E4DE` | `#121211` | Grease red `#D42A1C` | `#121211` ring, red pupil | Light-table screens, print, docs |
+
+- Square, no rounded corners, no shadow.
+- At 32 px and below, the hexagonal pupil is dropped and the ring and loop are thickened so the mark survives at taskbar and title-bar sizes.
+- In the header chrome the mark sits at 32 px before the `BESTOFBURST` wordmark (Archivo expanded 800, uppercase).
+

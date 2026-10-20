@@ -147,9 +147,50 @@ pub fn logo(ui: &Ui, rect: Rect, color: Color32) {
 }
 
 /// Logo mark plus BESTOFBURST wordmark; returns its rect.
-pub fn wordmark(ui: &Ui, left_center: Pos2, color: Color32, mark: Color32) -> Rect {
-    let logo_rect = Rect::from_center_size(left_center + vec2(14.0, 0.0), vec2(28.0, 28.0));
-    let r = theme::text_at(ui, left_center + vec2(34.0, 0.0), Align2::LEFT_CENTER, "BESTOFBURST", theme::f_xp(14.0), color, 0.6);
-    logo(ui, logo_rect, mark);
+pub fn wordmark(ui: &Ui, left_center: Pos2, color: Color32, dark: bool) -> Rect {
+    let logo_rect = Rect::from_center_size(left_center + vec2(16.0, 0.0), vec2(32.0, 32.0));
+    burst(ui, logo_rect, dark);
+    let r = theme::text_at(ui, left_center + vec2(42.0, 0.0), Align2::LEFT_CENTER, "BESTOFBURST", theme::f_xp(14.0), color, 0.6);
     logo_rect.union(r)
+}
+
+fn rot(v: eframe::egui::Vec2, deg: f32) -> eframe::egui::Vec2 {
+    let (s, c) = deg.to_radians().sin_cos();
+    vec2(v.x * c - v.y * s, v.x * s + v.y * c)
+}
+
+/// The BestOfBurst logo (assets/logo/bestofburst.svg): a burst of twelve frames around an
+/// aperture, one frame lit and circled. `dark` is F1 (darkroom), otherwise F2 (light table).
+pub fn burst(ui: &Ui, rect: Rect, dark: bool) {
+    let (bg, ray, lit, eye, dot) = if dark {
+        (theme::INK, theme::GRAPHITE, theme::SAFELIGHT, theme::TABLE, theme::SAFELIGHT)
+    } else {
+        (theme::TABLE, theme::INK, theme::RED, theme::INK, theme::RED)
+    };
+    let painter = ui.painter();
+    let k = rect.width() / 135.0;
+    let c = rect.min + vec2(67.5, 67.5) * k;
+    painter.rect_filled(rect, 0.0, bg);
+    let ray_pts = [vec2(-4.0, -27.0), vec2(4.0, -27.0), vec2(7.0, -52.0), vec2(-7.0, -52.0)];
+    for a in (0..360).step_by(30) {
+        let pts: Vec<Pos2> = ray_pts.iter().map(|v| c + rot(*v, a as f32) * k).collect();
+        painter.add(Shape::convex_polygon(pts, if a == 30 { lit } else { ray }, Stroke::NONE));
+    }
+    let small = rect.width() < 40.0;
+    painter.circle_stroke(c, 17.0 * k, Stroke::new((if small { 4.5 } else { 3.0 }) * k, eye));
+    if !small {
+        let hex = [(7.6, 2.4), (1.8, 7.8), (-5.9, 5.4), (-7.6, -2.4), (-1.8, -7.8), (5.9, -5.4)];
+        let pts: Vec<Pos2> = hex.iter().map(|(x, y)| c + vec2(*x, *y) * k).collect();
+        painter.add(Shape::closed_line(pts, Stroke::new(2.0 * k, eye)));
+    }
+    painter.circle_filled(c, 2.6 * k, dot);
+    // The loop around the lit frame: the keeper path, scaled (0.36, 0.58) and turned 30 degrees.
+    let raw = points(&THUMB_CIRCLE, Rect::from_min_size(Pos2::ZERO, vec2(120.0, 100.0)));
+    let at = rect.min + vec2(87.5, 32.9) * k;
+    let pts: Vec<Pos2> = raw
+        .iter()
+        .map(|p| at + rot(vec2((p.x - 55.0) * 0.36, (p.y - 51.0) * 0.58), 30.0) * k)
+        .collect();
+    let w = (if small { 3.6 } else { 2.4 }) * k;
+    ui.painter().add(Shape::line(pts, Stroke::new(w.max(1.2), lit)));
 }

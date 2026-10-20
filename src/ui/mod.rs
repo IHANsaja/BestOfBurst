@@ -23,7 +23,8 @@ pub fn run(folder: Option<PathBuf>) -> anyhow::Result<()> {
             .with_title("BestOfBurst")
             .with_inner_size([1360.0, 860.0])
             .with_min_inner_size([1100.0, 700.0])
-            .with_drag_and_drop(true),
+            .with_drag_and_drop(true)
+            .with_icon(window_icon()),
         ..Default::default()
     };
     eframe::run_native(
@@ -32,4 +33,18 @@ pub fn run(folder: Option<PathBuf>) -> anyhow::Result<()> {
         Box::new(move |cc| Ok(Box::new(app::BestOfBurstApp::new(cc, folder)))),
     )
     .map_err(|e| anyhow::anyhow!("window: {e}"))
+}
+
+/// The burst logo for the title bar and taskbar.
+fn window_icon() -> std::sync::Arc<eframe::egui::IconData> {
+    let png = include_bytes!("../../assets/logo/bestofburst-256.png");
+    let icon = match image::load_from_memory_with_format(png, image::ImageFormat::Png) {
+        Ok(img) => {
+            let rgba = img.to_rgba8();
+            let (width, height) = rgba.dimensions();
+            eframe::egui::IconData { rgba: rgba.into_raw(), width, height }
+        }
+        Err(_) => eframe::egui::IconData::default(),
+    };
+    std::sync::Arc::new(icon)
 }

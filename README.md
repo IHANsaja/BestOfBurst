@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo/bestofburst.svg" width="128" alt="BestOfBurst logo: a burst of frames, one lit and circled"></p>
+
 # BestOfBurst (prototype)
 
 One Windows exe, written in Rust, that turns a folder of photos (10,000+ is fine) into a `picks`
@@ -129,6 +131,13 @@ save PNG renders of each screen.
   scores stay comparable.
 - `EngineMsg::Finished` carries the final state to the window so Review opens without
   re-reading disk.
+
+## Logo
+
+The logo is a burst of twelve frames around an aperture, with one frame lit and circled: the best
+of the burst. `assets/logo/bestofburst.svg` is the darkroom version (exe, taskbar, installer) and
+`bestofburst-light.svg` the light-table version. PNGs from 16 to 512 px and `bestofburst.ico`
+sit next to them; `build.rs` embeds the icon in the exe.
 
 ## License
 

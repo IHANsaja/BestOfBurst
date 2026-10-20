@@ -145,8 +145,13 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
     // Main: the light (or night) table.
     let main = egui::Frame::new().fill(p.surface).inner_margin(48.0);
     egui::CentralPanel::default().frame(main).show(ui, |ui| {
-        ui.label(theme::mono("BestOfBurst · offline photo culler", 11.0, p.muted));
-        ui.add_space(14.0);
+        ui.horizontal(|ui| {
+            let (r, _) = ui.allocate_exact_size(vec2(44.0, 44.0), Sense::hover());
+            marks::burst(ui, r, p.night);
+            ui.add_space(6.0);
+            ui.label(theme::mono("BestOfBurst · offline photo culler", 11.0, p.muted));
+        });
+        ui.add_space(10.0);
         hero(ui, p);
         ui.add_space(14.0);
         ui.label(theme::body(
