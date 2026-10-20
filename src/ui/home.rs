@@ -137,7 +137,7 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
     let mut rerun = false;
     egui::Panel::right("home_side").exact_size(400.0).resizable(false).frame(side).show(ui, |ui| {
         theme::dark_scope(ui);
-        ui.spacing_mut().item_spacing.y = 10.0;
+        ui.spacing_mut().item_spacing.y = 7.0;
 
         // Actions stay pinned to the bottom; the settings above scroll.
         egui::Panel::bottom("home_actions").frame(egui::Frame::new().fill(theme::INK)).show(ui, |ui| {
@@ -173,7 +173,7 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
             } else {
                 "Drop a shoot here and I'll circle the best photos.".to_string()
             };
-            if glim::card(ui, Mood::Happy, true, &msg, 64.0, app.time(), app.reduced_motion).clicked() {
+            if glim::card(ui, Mood::Happy, true, &msg, 48.0, app.time(), app.reduced_motion).clicked() {
                 app.open_corner();
             }
             ui.add_space(10.0);
@@ -221,7 +221,7 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
                         if theme::button(ui, "+", None, Btn::MonoSmall, 40.0, Some(40.0), app.threads < max).clicked() {
                             app.threads += 1;
                         }
-                        ui.label(theme::xp(format!("{}", app.threads), 18.0, theme::TABLE));
+                        ui.label(theme::xp(format!("{} / {}", app.threads, max), 18.0, theme::TABLE));
                         if theme::button(ui, "-", None, Btn::MonoSmall, 40.0, Some(40.0), app.threads > 1).clicked() {
                             app.threads -= 1;
                         }
@@ -229,6 +229,35 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
                     open
                 })
                 .inner;
+            // What the selected Speed option allows on this computer.
+            let max = snap.logical.max(1);
+            let gpu_ready = matches!(crate::gpu::status(), Some(Ok(_)));
+            let with_gpu = match app.settings.engine {
+                EngineChoice::Cpu => false,
+                EngineChoice::Gpu => true,
+                EngineChoice::Auto => gpu_ready,
+            };
+            let gpu_cores = if gpu_ready {
+                snap.gpu_cores.or_else(|| match crate::gpu::status() {
+                    Some(Ok(i)) => crate::sysmon::known_cores(&i.name),
+                    _ => None,
+                })
+            } else {
+                None
+            };
+            let limits = if with_gpu {
+                let cores = gpu_cores.map(|c| format!("its {} cores", theme::thousands(c as usize))).unwrap_or_else(|| "all its cores".into());
+                format!(
+                    "Up to {max} at once on this computer: the processor opens up to {max} photos together, and the graphics card checks each one with {cores}. Fastest here: {max}."
+                )
+            } else {
+                format!(
+                    "Up to {max} at once on this processor ({} cores). {} leaves one free so your computer stays responsive.",
+                    snap.physical,
+                    (max.saturating_sub(1)).max(1)
+                )
+            };
+            ui.label(theme::body(limits, 12.5, theme::ASH));
             if open {
                 help::card(ui, help::THREADS, true);
             }

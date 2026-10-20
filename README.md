@@ -1,101 +1,186 @@
-<p align="center"><img src="assets/logo/bestofburst.svg" width="128" alt="BestOfBurst logo: a burst of frames, one lit and circled"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/readme/hero-dark.svg">
+    <img src="docs/readme/hero-light.svg" alt="BestOfBurst. Ten thousand frames. Circle the best." width="100%">
+  </picture>
+</p>
 
-# BestOfBurst (prototype)
+<p align="center">
+  <a href="https://github.com/IHANsaja/BestOfBurst/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/IHANsaja/BestOfBurst?style=flat-square&label=release&labelColor=121211&color=D42A1C"></a>
+  <a href="https://github.com/IHANsaja/BestOfBurst/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/IHANsaja/BestOfBurst/total?style=flat-square&label=downloads&labelColor=121211&color=FF5A40"></a>
+  <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%C2%B7%2011-E6E4DE?style=flat-square&labelColor=121211">
+  <img alt="64-bit and 32-bit" src="https://img.shields.io/badge/builds-64--bit%20%C2%B7%2032--bit-E6E4DE?style=flat-square&labelColor=121211">
+  <img alt="Works offline" src="https://img.shields.io/badge/works-100%25%20offline-E6E4DE?style=flat-square&labelColor=121211">
+  <img alt="GPU accelerated" src="https://img.shields.io/badge/GPU-DirectX%2012%20%C2%B7%20Vulkan-D9A441?style=flat-square&labelColor=121211">
+  <img alt="Written in Rust" src="https://img.shields.io/badge/made%20with-Rust-D9A441?style=flat-square&labelColor=121211&logo=rust&logoColor=E6E4DE">
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/github/license/IHANsaja/BestOfBurst?style=flat-square&labelColor=121211&color=5C5A55"></a>
+</p>
 
-One Windows exe, written in Rust, that turns a folder of photos (10,000+ is fine) into a `picks`
-folder of the best N shots. It runs offline on the CPU, uses no AI/ML and no database, and keeps
-all progress in one `state.json`, so an interrupted run resumes where it stopped.
+<p align="center"><b>BestOfBurst culls a shoot for you.</b> Drop in a folder of thousands of photos and it stacks every burst, sets aside the out-of-focus and badly exposed frames, and circles the best photo of each moment. You only look where it's a genuine close call.</p>
 
-## Build
+---
 
-Prerequisites: Rust stable with the MSVC toolchain and Visual Studio Build Tools with
-"Desktop development with C++".
+## Download
+
+Get the latest version from the **[Releases page](https://github.com/IHANsaja/BestOfBurst/releases/latest)**.
+
+| File | Choose this if |
+| --- | --- |
+| `BestOfBurst-<version>-Setup-64bit.exe` | **Most people.** Installs BestOfBurst with a Start Menu shortcut. For 64-bit Windows. |
+| `BestOfBurst-<version>-Setup-32bit.exe` | Your PC runs 32-bit Windows (older machines). Also works on 64-bit. |
+| `BestOfBurst-<version>-Portable-64bit.exe` | You'd rather not install anything: one file, double-click to run. |
+| `BestOfBurst-<version>-Portable-32bit.exe` | Portable, for 32-bit Windows. |
+
+> **Not sure which?** Open *Settings › System › About* and look at *System type*. "64-bit operating system" means the 64-bit files. Almost every PC from the last decade is 64-bit.
+>
+> The files aren't code-signed yet, so Windows SmartScreen may ask you to confirm the first time (*More info › Run anyway*).
+
+## How it works
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/readme/pipeline-dark.svg">
+    <img src="docs/readme/pipeline-light.svg" alt="Find photos, check quality, stack bursts, pick the best" width="100%">
+  </picture>
+</p>
+
+1. **Choose a shoot**: drop a folder on the window. Set how many photos you want to keep (a number like `300`, or a share like `10%`) and the type of shoot.
+2. **Start culling**: every photo is checked for focus, exposure, contrast, noise and colour. Photos of the same moment are stacked together.
+3. **Look at the close calls**: open the loupe to see the subject at 100 % and decide in a keystroke.
+4. **Deliver**: your keepers land in a `picks` folder inside the shoot, numbered best-first, ready for Lightroom, Capture One or your client.
+
+Your original files are **never** changed, moved, renamed or deleted, and nothing ever leaves your computer.
+
+## The marks
+
+Every decision is a hand-drawn mark, readable at a glance, like grease pencil on a light table.
+
+<p align="center"><img src="docs/readme/marks.svg" alt="Keeper: circled. Maybe: wave. Set aside: cross. Close call: question mark." width="100%"></p>
+
+## Screens
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/contact-sheet.png" alt="Contact sheet on the light table"><br><sub><b>Contact sheet</b>: your shoot over time, bursts stacked, keepers circled.</sub></td>
+    <td width="50%"><img src="docs/screenshots/loupe.jpg" alt="Loupe on a close call"><br><sub><b>Loupe</b>: one moment at a time, with the subject at 100 %.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/compare.jpg" alt="Compare two frames with a slider"><br><sub><b>Compare</b>: slide or flip between the circled frame and the runner-up.</sub></td>
+    <td><img src="docs/screenshots/processing.png" alt="Processing with live hardware readings"><br><sub><b>Culling</b>: live progress, plus what your processor and graphics card are doing.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/contact-sheet-night.png" alt="Contact sheet on the night table"><br><sub><b>Night table</b>: one switch for dim rooms.</sub></td>
+    <td><img src="docs/screenshots/glims-corner.png" alt="Glim's corner"><br><sub><b>Glim</b>: a small helper who earns treats for every close call you settle.</sub></td>
+  </tr>
+</table>
+
+<sub>Screens shown with synthetic test photos.</sub>
+
+## Features
+
+- **Burst stacking**: photos of the same moment are grouped, even when you return to the same pose a minute later. By default only the best frame of each moment becomes a keeper.
+- **Sharp where it matters**: within a burst, frames are compared on the subject, so a busy background never beats a sharp face.
+- **Honest set-asides**: out of focus or shaken, blown highlights, too dark, flat. Every reason is shown, and you can overrule any decision.
+- **Close calls only**: frames that are nearly equal get a **?**. Press **N** to walk through them, **Z** for 100 %, **Enter** to keep.
+- **Fast**: uses your graphics card when it helps (DirectX 12 or Vulkan) and every processor core you allow, and shows you exactly what it's doing.
+- **Resumable**: pause at any time; progress is saved and picked up where you left off. Changing how many to keep re-ranks in under a second.
+- **RAW, HEIC and more**: JPEG, PNG, TIFF, WebP, JPEG XL, HEIC/HEIF, AVIF and RAW from Canon, Nikon, Sony, Fujifilm, Olympus, Panasonic, Pentax, Leica, DNG and others.
+- **Plain-language help** on every option, keyboard shortcuts for everything, light and dark tables, and a short break reminder after 20 minutes of reviewing.
+
+## Speed
+
+Opening each photo file always happens on the processor. The graphics card then takes over the rest of the work: resizing, checking quality, burst matching and the thumbnail. Results match the processor-only path.
+
+Measured on an Intel Core i5-3330 (4 cores) with an NVIDIA GeForce GTX 650 Ti, culling 40 photos of 24 megapixels:
+
+| Speed setting | Photos at once | Photos per second |
+| --- | :---: | :---: |
+| Processor only | 3 (default) | 4.6 |
+| Graphics card | 3 (default) | **5.7** |
+| Processor only | 4 | 6.5 |
+| Graphics card | 4 | **7.0** |
+
+Home shows how many photos at once your computer allows (for example **3 / 4**) and explains the choice.
+
+## Supported formats
+
+| Format | How it's opened |
+| --- | --- |
+| JPEG, PNG, TIFF (8/16-bit), WebP, BMP, GIF, TGA, QOI, PNM, JPEG XL | Built in |
+| RAW: CR2, CR3, CRW, NEF, NRW, ARW, SR2, DNG, RAF, ORF, RW2, PEF, IIQ, 3FR, X3F and more | The full-size preview inside the RAW file |
+| HEIC / HEIF (iPhone) | Windows, with the free *HEIF Image Extensions* and *HEVC Video Extensions* |
+| AVIF | Windows, with the free *AV1 Video Extension* |
+| RAW without a usable preview | Windows, with the free *Raw Image Extension* |
+
+If an add-on is missing, BestOfBurst tells you which one to get from the Microsoft Store. Afterwards, tick *Try again on photos that couldn't be opened*.
+
+## Keyboard
+
+| Where | Key | Action |
+| --- | --- | --- |
+| Everywhere | F1 | Help |
+| | Ctrl+Z / Ctrl+Y | Undo / redo (50 steps) |
+| | Esc | Back |
+| Contact sheet | Arrows | Move |
+| | P / U / X / 0 | Keeper / maybe / set aside / reset |
+| | Space | Open the loupe on this burst |
+| | N | Next close call |
+| | C | Compare |
+| | G | Spread out or stack this burst |
+| | 1 / 2 / 3 / 4 | Keepers / Maybe / Set aside / All |
+| | Ctrl+E | Deliver |
+| Loupe | Left / Right, 1–4 | Another photo of the burst |
+| | P | Move the circle |
+| | Enter | Keep & next close call |
+| | Z | Bigger loupe |
+| Compare | 1 / 2 | Keep A / keep B |
+| | W / B / Space | Slider / flip / swap |
+| | Z | Zoom to 100 % |
+
+## Delivery
+
+**Deliver** (Ctrl+E) writes into `<your shoot>\_bestofburst\`:
+
+| Folder or file | Contents |
+| --- | --- |
+| `picks\` | Your keepers, numbered best-first: `0001_IMG_4821.CR3`, `0002_...` |
+| `maybe\` | *(optional)* good photos that didn't make the cut |
+| `rejects\<reason>\` | *(optional)* set-aside photos, one folder per reason |
+| `report.csv` | Every photo with its quality and decision; opens in Excel |
+
+Files in these folders are shortcuts (hard links) by default: they open like the real photos but take no extra disk space, and deleting one never deletes your original. **If you plan to edit photos inside `picks`, tick *Make full copies***, because saving over a shortcut changes the original too.
+
+---
+
+## For developers
+
+<details>
+<summary><b>Build from source</b></summary>
+
+Requirements: Windows 10/11, [Rust](https://rustup.rs) stable (MSVC), Visual Studio Build Tools with *Desktop development with C++*, and [Inno Setup 6](https://jrsoftware.org/isinfo.php) for the installers.
 
 ```bash
 cargo build --release
 ```
 
-The result is `target\release\bestofburst.exe`.
-
-To build the Windows installer, install [Inno Setup 6](https://jrsoftware.org/isinfo.php) and run:
+Every release file (64-bit and 32-bit installers and portable exes):
 
 ```bash
-ISCC.exe installer\bestofburst.iss
+rustup target add i686-pc-windows-msvc
 ```
 
-It writes `installer\Output\BestOfBurst-Setup-<version>.exe`. The installer works per user
-without admin rights (or for all users) and adds a Start Menu shortcut and an uninstaller.
+```bash
+powershell -ExecutionPolicy Bypass -File installer\build.ps1
+```
 
-## Use
+Output lands in `installer\Output\`.
 
-Double-click `bestofburst.exe` (or run `bestofburst ui [FOLDER]`) to open the window. The window
-follows the **Grease Pencil** design system in [DESIGN.md](DESIGN.md): a light table (or a night
-table) where every decision is a hand-drawn mark. A **circle** means keeper, a **wave** means
-maybe, a **cross** means set aside, and **?** marks a close call.
+</details>
 
-1. **Home**: drop a shoot folder (or click the drop zone), set **Keep** (a number, or a
-   percentage like `10%`) and the **shot type**, then press **Develop**.
-2. **Processing**: frame counter, steps, live film strip. **Pause & save** stops and resumes
-   later; **Open contact sheet** continues when it's done.
-3. **Contact sheet**: a timeline of the shoot (red bars hold close calls) and time rows of six
-   marked frames. The side panel shows how many close calls need your eyes.
-4. **Loupe** (focus): one same-shot group on the night table with the subject at 100 %.
-   Keep the circle or move it, then go to the next close call.
-5. **Compare**: wipe or blink between the keeper (A) and the runner-up (B).
-6. **Done**: the keeper count circled, delivery options, and **Deliver**.
-7. **Glim's corner**: Glim, the pencil mascot. Every close call you settle earns a treat;
-   spend them here, or play **Sharp Eye** with frames from your own shoot.
+<details>
+<summary><b>Command line</b></summary>
 
-After 20 minutes of review a dismissable **safelight break** suggests resting your eyes.
-Every option has a **?** button with a plain-language explanation, and **Help (F1)** explains the
-whole app. The window draws its own title bar in the same style: drag it to move, double-click to
-maximize, and resize from any edge.
-
-### GPU and CPU
-
-Home's **Engine** setting picks the hardware: **Auto** (the graphics card when one works, else the
-processor), **GPU** or **CPU**. Opening (decoding) each photo always runs on the CPU. With the GPU,
-the graphics card then does the resize to 2,048 px, the measurements, the dHash and the thumbnail
-through wgpu compute shaders (DirectX 12 or Vulkan). Any GPU problem falls back to the CPU for
-that photo, and the results match the CPU path to about four significant digits.
-
-The Processing screen shows the engine live: processor use (whole computer and BestOfBurst),
-cores and busy workers, graphics-card use, cores (NVIDIA reports them; other drivers do not),
-video memory, and the average time per photo for each step.
-
-Measured on an Intel i5-3330 (4 cores) with a GeForce GTX 650 Ti, 40 photos of 24 MP:
-
-| Engine | Threads | Photos per second |
-| --- | --- | --- |
-| CPU | 3 (default) | 4.6 |
-| GPU | 3 (default) | 5.7 |
-| CPU | 4 | 6.5 |
-| GPU | 4 | 7.0 |
-The day/night table choice and Glim's state are saved in `%APPDATA%\bestofburst\settings.json`.
-
-| Where | Key | Action |
-| --- | --- | --- |
-| Contact sheet | Arrows | Move selection |
-| | P / U / X / 0 | Keeper / maybe / set aside / clear your call |
-| | Space | Open the loupe on the selected group |
-| | N | Loupe on the next close call |
-| | C | Compare the selected group |
-| | G | Expand or collapse the selected stack |
-| | 1 / 2 / 3 / 4 | Keepers / Maybe / Set aside / All |
-| | Ctrl+E | Go to delivery |
-| Loupe | Left / Right, 1-4 | Look at another frame of the group |
-| | P | Move the circle to the frame on screen (or to the runner-up) |
-| | Enter | Keep & next close call |
-| | N / C / X | Next close call / compare / set aside |
-| | Z | Bigger loupe |
-| Compare | 1 / 2 | Keep A / keep B |
-| | W / B / Space | Wipe / blink / flip by hand |
-| | Left / Right | Compare A with another frame |
-| | Z | 100 % crop |
-| Everywhere | Ctrl+Z / Ctrl+Y | Undo / redo (50 steps) |
-| | Esc | Back |
-
-Command line:
+The same exe has a command line for scripting and batch use:
 
 ```text
 bestofburst run <FOLDER> [--keep <N> | --keep-percent <P>] [--preset <general|portrait|sports|landscape>]
@@ -105,70 +190,63 @@ bestofburst run <FOLDER> [--keep <N> | --keep-percent <P>] [--preset <general|po
 bestofburst rank <FOLDER> [same ranking and output flags as run]   # re-rank from state.json only
 bestofburst status <FOLDER> [--out <DIR>]
 bestofburst ui [FOLDER]
-bestofburst probe <FILE>                                            # also compares GPU with CPU
+bestofburst probe <FILE>                                            # format, metrics, GPU vs CPU timing
 ```
 
-Output goes to `<FOLDER>\_bestofburst\` (`picks`, optional `maybe` and `rejects`, `report.csv`,
-`state.json`, `thumbs`). Originals are never modified, moved, renamed or deleted.
+</details>
 
-Picks are **hard links** by default. A hard link is the same file as the original: deleting it
-from `picks` never deletes the original, but an editor that saves *in place* over a file in
-`picks` changes the original too. Use `--copy` (or Options > Copy in the window) if you will
-edit pixels directly.
+<details>
+<summary><b>Architecture</b></summary>
 
-## Formats
+| Path | Role |
+| --- | --- |
+| `src/scan.rs` | Folder walk, skip rules, format detection by file signature |
+| `src/decode/` | Decoders: zune-jpeg, image, jxl-oxide, embedded RAW preview, Windows Imaging Component |
+| `src/analyze.rs` | Eight metrics over an 8 × 8 tile grid, 64-bit dHash, capture time |
+| `src/gpu.rs` | wgpu compute shaders: Catmull-Rom resize, tile sums, dHash cells, thumbnail |
+| `src/rank.rs` | Burst grouping with look-back, rejects, percentile scoring, subject sharpness, selection |
+| `src/state.rs` | `state.json`: resumable progress, rankings and your choices (atomic saves) |
+| `src/output.rs` | Picks / maybe / rejects folders (hard links or copies), `report.csv` |
+| `src/engine.rs` | The pipeline shared by the window and the CLI |
+| `src/sysmon.rs` | Live CPU and GPU readings (Windows counters, NVML) |
+| `src/ui/` | The egui window in the Grease Pencil design system ([DESIGN.md](DESIGN.md)) |
 
-JPEG, PNG, TIFF (8/16-bit), WebP, BMP, GIF, TGA, QOI, PNM and JPEG XL are decoded in pure Rust.
-RAW files (CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2, ...) are read through their largest embedded
-JPEG preview. HEIC/HEIF, AVIF, JPEG XR and RAW files without a usable preview go through the
-Windows Imaging Component, which needs these free Microsoft Store extensions:
+Grouping constants and set-aside thresholds live at the top of `src/rank.rs`. Tune them against a real shoot.
 
-- HEIC: *HEIF Image Extensions* + *HEVC Video Extensions*
-- AVIF: *AV1 Video Extension*
-- RAW without a preview: *Raw Image Extension*
+</details>
 
-`bestofburst probe <file>` shows whether a codec is missing. After installing one, run again
-with `--retry-failed` (or tick "Retry files that failed before" in the window).
-
-## Tuning
-
-Grouping constants and reject thresholds live at the top of `src/rank.rs`. They are starting
-points: look at the rejects, the top picks and a few same-shot groups from a real shoot, then
-adjust them there.
-
-## Tests
+<details>
+<summary><b>Tests</b></summary>
 
 ```bash
 cargo test
 ```
 
-`tests/ui.rs` drives the window offscreen with egui_kittest. Set `BOB_UI_SNAPSHOTS=<dir>` to
-save PNG renders of each screen.
+24 tests cover the metrics, GPU-vs-CPU agreement, the RAW preview path, every pure-Rust format, ranking, state saving and resume, output safety (originals hashed before and after) and the whole window, driven offscreen with egui_kittest. Set `BOB_UI_SNAPSHOTS=<dir>` to save a render of each screen.
 
-## Deviations from the spec (`// SPEC-GAP:` in the code)
+The README artwork in `docs/readme/` is generated by `python docs/readme/make_svgs.py`.
 
-- The package has a library target next to the binary so `tests/` can reach the engine;
-  the build still produces one `bestofburst.exe`.
-- The shared run loop lives in `src/engine.rs` instead of `main.rs`, so the window and the
-  CLI call one implementation.
+</details>
+
+<details>
+<summary><b>Notes against the original build spec</b></summary>
+
+- The package has a library target next to the binary so `tests/` can reach the engine; the build still produces one `bestofburst.exe`.
+- The shared run loop lives in `src/engine.rs` instead of `main.rs`, so the window and the CLI call one implementation.
 - The `image` crate also enables `jpeg`, to encode the 320 px thumbnails.
-- Rejected files get percentiles interpolated against the eligible set, so their report
-  scores stay comparable.
-- `EngineMsg::Finished` carries the final state to the window so Review opens without
-  re-reading disk.
+- Rejected files get percentiles interpolated against the eligible set, so their report scores stay comparable.
+- GPU analysis (out of scope in the prototype spec) is optional and falls back to the CPU per photo.
 
-## Logo
+</details>
 
-The logo is a burst of twelve frames around an aperture, with one frame lit and circled: the best
-of the burst. `assets/logo/bestofburst.svg` is the darkroom version (exe, taskbar, installer) and
-`bestofburst-light.svg` the light-table version. PNGs from 16 to 512 px and `bestofburst.ico`
-sit next to them; `build.rs` embeds the icon in the exe.
+## Design
+
+The interface follows **Grease Pencil**, BestOfBurst's design system: a light table by day and a darkroom by night, with photos as the only colourful things on screen. See **[DESIGN.md](DESIGN.md)** for the tokens, type, marks, components and screens.
+
+The logo is a burst of twelve frames around an aperture, with one frame lit and circled: the best of the burst. Source files are in `assets/logo/` (SVG, PNG 16–512 px and ICO).
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+[MIT](LICENSE) © 2026 Ihan Hansaja.
 
-The window bundles static instances of **Archivo** and **Martian Mono**, both under the SIL Open
-Font License 1.1 (`assets/fonts/OFL-*.txt`). They are baked from the variable fonts in
-[google/fonts](https://github.com/google/fonts) with fontTools (Archivo at 125 % width for
-display text, with tabular figures; Martian Mono at 87.5 % width).
+Bundles **Archivo** and **Martian Mono** under the SIL Open Font License 1.1 (`assets/fonts/OFL-*.txt`), instanced from [google/fonts](https://github.com/google/fonts). Built with [egui](https://github.com/emilk/egui), [wgpu](https://github.com/gfx-rs/wgpu), [image](https://github.com/image-rs/image), [zune-jpeg](https://github.com/etemesi254/zune-image), [jxl-oxide](https://github.com/tirr-c/jxl-oxide) and [rayon](https://github.com/rayon-rs/rayon).

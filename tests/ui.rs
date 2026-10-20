@@ -62,7 +62,8 @@ fn screen(h: &Harness<'_, BestOfBurstApp>) -> Screen {
 
 #[test]
 fn window_flow() {
-    let dir = scratch("ui");
+    let dir = scratch("ui").join("Garden Wedding 2026");
+    std::fs::create_dir_all(&dir).unwrap();
     // Keep recent folders and settings out of the real %APPDATA%.
     let appdata = scratch("ui-appdata");
     std::env::set_var("APPDATA", &appdata);
@@ -86,6 +87,13 @@ fn window_flow() {
     snapshot(&mut h, "1_home");
     let info = h.state().folder_info.clone().unwrap();
     assert_eq!((info.total, info.analyzed, info.new), (15, 15, 0));
+    // A tall window shows the whole Home side panel, including Photos at once.
+    h.set_size(egui::vec2(1440.0, 1250.0));
+    settle(&mut h, |_| true);
+    snapshot(&mut h, "1_home_tall");
+    h.set_size(egui::vec2(1440.0, 900.0));
+    settle(&mut h, |_| true);
+
     // Help (F1) and back.
     h.key_press(Key::F1);
     settle(&mut h, |a| a.screen == Screen::Help);
