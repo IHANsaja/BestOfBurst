@@ -185,3 +185,51 @@ fn resize_never_upscales_and_caps_long_edge() {
     let r = decode::resize_long_edge(small, 2048).unwrap();
     assert_eq!((r.width, r.height), (800, 600));
 }
+
+fn textured(w: u32, h: u32, seed: u64) -> RgbImage {
+    let mut img = scene(w, h, seed);
+    let mut rng = Rng::new(seed);
+    for v in img.rgb.iter_mut() {
+        *v = (*v as f64 + 14.0 * rng.gauss()).round().clamp(0.0, 255.0) as u8;
+    }
+    img
+}
+
+fn close(a: f32, b: f32, rel: f32, abs: f32) -> bool {
+    (a - b).abs() <= abs.max(rel * a.abs().max(b.abs()))
+}
+
+#[test]
+fn gpu_matches_cpu() {
+    use bestofburst::analyze::{dhash_from_cells, finish};
+    let g = match bestofburst::gpu::get() {
+        Ok(g) => g,
+        Err(why) => {
+            eprintln!("skipping: no GPU ({why})");
+            return;
+        }
+    };
+    // Odd sizes exercise the unaligned upload tail; 1500 x 999 needs no resize.
+    for (w, h, seed) in [(3001u32, 2001u32, 11u64), (1500, 999, 12), (2400, 3600, 13)] {
+        let img = textured(w, h, seed);
+        let small = decode::resize_long_edge(img.clone(), 2048).unwrap();
+        let (cm, ct) = analyze(&small);
+        let ch = dhash(&small);
+        let o = g.analyze(&img, 2048, 320).expect("gpu analyze");
+        assert_eq!((o.width, o.height), (small.width, small.height), "{w}x{h}");
+        let (gm, gt) = finish(&o.sums);
+        assert!(close(cm.sharpness, gm.sharpness, 0.02, 0.5), "sharpness {} vs {}", cm.sharpness, gm.sharpness);
+        assert!(close(cm.tenengrad, gm.tenengrad, 0.02, 1.0), "tenengrad {} vs {}", cm.tenengrad, gm.tenengrad);
+        assert!(close(cm.mean_luma, gm.mean_luma, 0.0, 0.003), "luma {} vs {}", cm.mean_luma, gm.mean_luma);
+        assert!(close(cm.contrast, gm.contrast, 0.0, 0.003), "contrast {} vs {}", cm.contrast, gm.contrast);
+        assert!(close(cm.noise, gm.noise, 0.04, 0.05), "noise {} vs {}", cm.noise, gm.noise);
+        assert!(close(cm.colorfulness, gm.colorfulness, 0.02, 0.2), "color {} vs {}", cm.colorfulness, gm.colorfulness);
+        assert!(close(cm.clip_highlights, gm.clip_highlights, 0.0, 0.002));
+        assert!(close(cm.clip_shadows, gm.clip_shadows, 0.0, 0.002));
+        for k in 0..64 {
+            assert!(close(ct[k], gt[k], 0.03, 1.0), "tile {k}: {} vs {}", ct[k], gt[k]);
+        }
+        assert!(hamming(ch, dhash_from_cells(&o.cells)) <= 2, "dhash");
+        assert_eq!(o.thumb.width.max(o.thumb.height), 320.min(small.width.max(small.height)));
+    }
+}

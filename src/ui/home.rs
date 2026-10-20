@@ -4,10 +4,28 @@
 use eframe::egui::{self, pos2, vec2, Align2, Key, Rect, Role, Sense, Stroke, StrokeKind, WidgetInfo};
 
 use super::app::{self, BestOfBurstApp};
+use super::help;
+use crate::engine::EngineChoice;
 use super::glim::{self, Mood};
 use super::theme::{self, Btn};
 use super::marks;
 use crate::rank::PRESETS;
+
+const ENGINES: [(&str, &str); 3] = [("Auto", "Best available"), ("GPU", "Graphics card"), ("CPU", "Processor only")];
+
+/// One hardware line: label, name, details; a safelight dot when it is in use.
+fn hw_row(ui: &mut egui::Ui, kind: &str, name: &str, detail: &str, used: bool) {
+    ui.horizontal_top(|ui| {
+        let (r, _) = ui.allocate_exact_size(vec2(44.0, 18.0), Sense::hover());
+        theme::text_at(ui, r.left_center(), Align2::LEFT_CENTER, kind, theme::f_mono_semi(10.5), if used { theme::SAFELIGHT } else { theme::ASH }, 0.8);
+        ui.vertical(|ui| {
+            ui.label(theme::body(name, 14.0, theme::TABLE));
+            if !detail.is_empty() {
+                ui.label(egui::RichText::new(detail).font(theme::f_mono(10.0)).color(theme::ASH));
+            }
+        });
+    });
+}
 
 const SHOT_TYPES: [(&str, &str); 4] = [
     ("General", "Balanced"),
@@ -66,68 +84,14 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
     egui::Panel::right("home_side").exact_size(400.0).resizable(false).frame(side).show(ui, |ui| {
         theme::dark_scope(ui);
         ui.spacing_mut().item_spacing.y = 10.0;
-        let msg = if app.checking_folder {
-            "Counting frames on the table...".to_string()
-        } else if let Some(i) = &info {
-            if let Some(e) = &i.error {
-                e.clone()
-            } else if i.new == 0 && i.has_rank {
-                format!("All {} frames are measured. Open the contact sheet whenever you like.", fmt_n(i.total))
-            } else {
-                format!("Found {} frames: {} measured, {} new. Ready when you are.", fmt_n(i.total), fmt_n(i.analyzed), fmt_n(i.new))
-            }
-        } else {
-            "Drop a shoot on the table and I'll circle the best frames.".to_string()
-        };
-        if glim::card(ui, Mood::Happy, true, &msg, 64.0, app.time(), app.reduced_motion).clicked() {
-            app.open_corner();
-        }
-        ui.add_space(14.0);
 
-        let keep_label = ui.label(theme::mono("Keep", 11.0, theme::ASH));
-        let keep_ok = app.keep().is_some();
-        let edit = egui::TextEdit::singleline(&mut app.keep_text)
-            .font(theme::f_xp_black(64.0))
-            .text_color(if keep_ok { theme::TABLE } else { theme::SAFELIGHT })
-            .frame(egui::Frame::new())
-            .desired_width(f32::INFINITY);
-        ui.add(edit).labelled_by(keep_label.id).on_hover_text("A number of frames, or a percentage like 10%");
-        let target_hint = match (app.keep(), &info) {
-            (Some(k), Some(i)) if i.total > 0 => format!("About {} of {} frames", fmt_n(k.target(i.total)), fmt_n(i.total)),
-            _ => "A number, or a percentage like 10%".into(),
-        };
-        ui.label(theme::mono(target_hint, 10.5, theme::ASH));
-        ui.add_space(12.0);
-
-        ui.label(theme::mono("Shot type", 11.0, theme::ASH));
-        let mut sel = PRESETS.iter().position(|x| *x == app.preset).unwrap_or(0);
-        if theme::segmented(ui, &SHOT_TYPES, &mut sel, 2, true) {
-            app.preset = PRESETS[sel];
-        }
-        ui.add_space(12.0);
-
-        ui.label(theme::mono("Engine", 11.0, theme::ASH));
-        ui.horizontal(|ui| {
-            ui.label(theme::xp(format!("CPU × {}", app.threads), 15.0, theme::TABLE));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.visuals_mut().override_text_color = Some(theme::TABLE);
-                if theme::button(ui, "+", None, Btn::MonoSmall, 40.0, Some(40.0), app.threads < 256).clicked() {
-                    app.threads += 1;
-                }
-                if theme::button(ui, "-", None, Btn::MonoSmall, 40.0, Some(40.0), app.threads > 1).clicked() {
-                    app.threads -= 1;
-                }
-            });
-        });
-        ui.label(theme::body("Decoding runs on the CPU. The GPU only draws this window.", 13.0, theme::ASH));
-        if info.as_ref().map(|i| i.failed > 0).unwrap_or(false) {
-            ui.add_space(6.0);
-            ui.checkbox(&mut app.retry_failed, theme::body("Retry frames that failed before (after installing a codec)", 13.0, theme::TABLE));
-        }
-
-        ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-            if let Some((text, err, _)) = &app.message {
-                ui.label(theme::body(text, 13.0, if *err { theme::SAFELIGHT_SOFT } else { theme::TABLE }));
+        // Actions stay pinned to the bottom; the settings above scroll.
+        egui::Panel::bottom("home_actions").frame(egui::Frame::new().fill(theme::INK)).show(ui, |ui| {
+            theme::dark_scope(ui);
+            ui.add_space(10.0);
+            let label = if open_results { "Open contact sheet" } else { "Develop" };
+            if theme::button(ui, label, Some("enter"), Btn::Primary, 64.0, Some(ui.available_width()), can_start).clicked() {
+                primary = true;
             }
             if open_results {
                 ui.visuals_mut().override_text_color = Some(theme::TABLE);
@@ -135,9 +99,96 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
                     rerun = true;
                 }
             }
-            let label = if open_results { "Open contact sheet" } else { "Develop" };
-            if theme::button(ui, label, Some("enter"), Btn::Primary, 64.0, Some(ui.available_width()), can_start).clicked() {
-                primary = true;
+            if let Some((text, err, _)) = &app.message {
+                ui.label(theme::body(text, 13.0, if *err { theme::SAFELIGHT_SOFT } else { theme::TABLE }));
+            }
+        });
+
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            ui.set_max_width(352.0);
+            let msg = if app.checking_folder {
+                "Counting frames on the table...".to_string()
+            } else if let Some(i) = &info {
+                if let Some(e) = &i.error {
+                    e.clone()
+                } else if i.new == 0 && i.has_rank {
+                    format!("All {} frames are measured. Open the contact sheet whenever you like.", fmt_n(i.total))
+                } else {
+                    format!("Found {} frames: {} measured, {} new. Ready when you are.", fmt_n(i.total), fmt_n(i.analyzed), fmt_n(i.new))
+                }
+            } else {
+                "Drop a shoot on the table and I'll circle the best frames.".to_string()
+            };
+            if glim::card(ui, Mood::Happy, true, &msg, 64.0, app.time(), app.reduced_motion).clicked() {
+                app.open_corner();
+            }
+            ui.add_space(10.0);
+
+            help::labelled(ui, "Keep", "keep", help::KEEP, true, theme::ASH);
+            let keep_ok = app.keep().is_some();
+            let edit = egui::TextEdit::singleline(&mut app.keep_text)
+                .font(theme::f_xp_black(56.0))
+                .text_color(if keep_ok { theme::TABLE } else { theme::SAFELIGHT })
+                .frame(egui::Frame::new())
+                .desired_width(f32::INFINITY);
+            ui.add(edit).on_hover_text("A number of frames, or a percentage like 10%");
+            let target_hint = match (app.keep(), &info) {
+                (Some(k), Some(i)) if i.total > 0 => format!("About {} of {} frames", fmt_n(k.target(i.total)), fmt_n(i.total)),
+                _ => "A number, or a percentage like 10%".into(),
+            };
+            ui.label(theme::mono(target_hint, 10.5, theme::ASH));
+            ui.add_space(8.0);
+
+            help::labelled(ui, "Shot type", "shot", help::SHOT_TYPE, true, theme::ASH);
+            let mut sel = PRESETS.iter().position(|x| *x == app.preset).unwrap_or(0);
+            if theme::segmented(ui, &SHOT_TYPES, &mut sel, 2, true) {
+                app.preset = PRESETS[sel];
+            }
+            ui.add_space(8.0);
+
+            help::labelled(ui, "Engine", "engine", help::ENGINE, true, theme::ASH);
+            let engines = [EngineChoice::Auto, EngineChoice::Gpu, EngineChoice::Cpu];
+            let mut esel = engines.iter().position(|e| *e == app.settings.engine).unwrap_or(0);
+            if theme::segmented(ui, &ENGINES, &mut esel, 3, true) {
+                app.settings.engine = engines[esel];
+            }
+            let snap = app.sys();
+            let (gname, gdetail) = app::gpu_line(&snap);
+            let gpu_used = app.settings.engine != EngineChoice::Cpu && matches!(crate::gpu::status(), Some(Ok(_)));
+            hw_row(ui, "GPU", &gname, &gdetail, gpu_used);
+            let cpu_detail = format!(
+                "{} cores · {} logical processors · {} used for opening photos",
+                snap.physical,
+                snap.logical,
+                theme::plural(app.threads, "thread")
+            );
+            hw_row(ui, "CPU", "Processor", &cpu_detail, true);
+
+            let open = ui
+                .horizontal(|ui| {
+                    ui.label(theme::mono("Threads", 11.0, theme::ASH));
+                    ui.add_space(4.0);
+                    let open = help::toggle(ui, "threads", "Threads");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.visuals_mut().override_text_color = Some(theme::TABLE);
+                        let max = snap.logical.max(1);
+                        if theme::button(ui, "+", None, Btn::MonoSmall, 40.0, Some(40.0), app.threads < max).clicked() {
+                            app.threads += 1;
+                        }
+                        ui.label(theme::xp(format!("{}", app.threads), 18.0, theme::TABLE));
+                        if theme::button(ui, "-", None, Btn::MonoSmall, 40.0, Some(40.0), app.threads > 1).clicked() {
+                            app.threads -= 1;
+                        }
+                    });
+                    open
+                })
+                .inner;
+            if open {
+                help::card(ui, help::THREADS, true);
+            }
+            if info.as_ref().map(|i| i.failed > 0).unwrap_or(false) {
+                ui.add_space(6.0);
+                ui.checkbox(&mut app.retry_failed, theme::body("Retry frames that failed before (after installing a codec)", 13.0, theme::TABLE));
             }
         });
     });

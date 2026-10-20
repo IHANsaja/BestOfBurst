@@ -14,7 +14,9 @@ use serde::{Deserialize, Serialize};
 use super::review::Review;
 use super::textures::Textures;
 use super::theme::{self, Pal};
-use super::{compare, corner, done, focus, home, marks, progress, review};
+use super::{compare, corner, done, focus, help, home, marks, progress, review};
+use crate::engine::EngineChoice;
+use crate::sysmon::{self, Monitor, Snapshot};
 use crate::engine::{self, Event, RunConfig};
 use crate::output::OutputSummary;
 use crate::rank::{Keep, Preset, RankSummary};
@@ -34,6 +36,7 @@ pub enum Screen {
     Compare,
     Done,
     Corner,
+    Help,
 }
 
 pub enum EngineMsg {
@@ -88,8 +91,10 @@ pub struct ProgressInfo {
 
 /// Small per-user preferences and Glim's state, in %APPDATA%\bestofburst\settings.json.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct Settings {
     pub night: bool,
+    pub engine: EngineChoice,
     pub treats: u32,
     pub joy: f32,
     pub energy: f32,
@@ -99,7 +104,7 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { night: false, treats: 0, joy: 60.0, energy: 70.0, settled: 0, sharp_eye_best: 0 }
+        Settings { night: false, engine: EngineChoice::Auto, treats: 0, joy: 60.0, energy: 70.0, settled: 0, sharp_eye_best: 0 }
     }
 }
 
@@ -153,6 +158,8 @@ pub struct BestOfBurstApp {
     pub corner_return: Screen,
     pub corner: corner::CornerState,
     pub last_delivery: Option<OutputSummary>,
+    pub help_return: Screen,
+    pub monitor: Monitor,
 }
 
 /// Writes `state.json` on its own thread, always the newest snapshot.
@@ -216,7 +223,13 @@ impl BestOfBurstApp {
             corner_return: Screen::Home,
             corner: corner::CornerState::default(),
             last_delivery: None,
+            help_return: Screen::Home,
+            monitor: Monitor::start(),
         };
+        // Start the graphics card in the background so Home can show it without waiting.
+        std::thread::spawn(|| {
+            let _ = crate::gpu::get();
+        });
         if let Some(f) = folder {
             let f = std::path::absolute(&f).unwrap_or(f);
             app.choose_folder(f, &cc.egui_ctx);
@@ -247,6 +260,17 @@ impl BestOfBurstApp {
             .and_then(|f| f.file_name())
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "No shoot".into())
+    }
+
+    pub fn open_help(&mut self) {
+        if self.screen != Screen::Help {
+            self.help_return = self.screen;
+        }
+        self.screen = Screen::Help;
+    }
+
+    pub fn sys(&self) -> Snapshot {
+        self.monitor.get()
     }
 
     pub fn open_corner(&mut self) {
@@ -290,6 +314,7 @@ impl BestOfBurstApp {
         cfg.preset = self.preset;
         cfg.threads = self.threads;
         cfg.retry_failed = self.retry_failed;
+        cfg.engine = self.settings.engine;
         self.stop = Arc::new(AtomicBool::new(false));
         self.prog = ProgressInfo { scanning: true, started: Some(Instant::now()), ..Default::default() };
         self.finished_state = None;
@@ -305,6 +330,7 @@ impl BestOfBurstApp {
             };
             let res = engine::analyze_folder(&cfg, &stop, |ev| match ev {
                 Event::Warning(w) => send(EngineMsg::Warning(w)),
+                Event::Engine(e) => send(EngineMsg::Warning(e)),
                 Event::Scanned { total, new, .. } => send(EngineMsg::Scanned { total, new }),
                 Event::Progress { done, total, per_sec, eta_s, last, last_thumb } => send(EngineMsg::Progress {
                     done,
@@ -515,13 +541,29 @@ fn folder_info(folder: &Path) -> FolderInfo {
 
 // ---- Chrome bar (4.3): a row of cells separated by 1 px rules ----
 
-/// Show the chrome bar: `left` fills cells from the left, `right` from the right.
+/// Asked for Help from a chrome-bar cell this frame.
+fn help_flag() -> egui::Id {
+    #[allow(deprecated)]
+    egui::Id::new("bob_help_request")
+}
+
+/// Show the chrome bar, which is also the window's title bar: `left` fills cells from the
+/// left, `right` from the right, before Help and the window controls.
 pub fn chrome_bar(ui: &mut Ui, id: &str, left: impl FnOnce(&mut Ui), right: impl FnOnce(&mut Ui)) {
     let frame = egui::Frame::new().fill(theme::INK);
     egui::Panel::top(id.to_string()).exact_size(HEADER_H).frame(frame).show(ui, |ui| {
         theme::dark_scope(ui);
         ui.spacing_mut().item_spacing.x = 0.0;
         let full = ui.max_rect();
+        // Empty parts of the bar move the window; double-click maximizes.
+        let drag = ui.interact(full, ui.scope_id().with("titlebar_drag"), Sense::click_and_drag());
+        if drag.drag_started_by(egui::PointerButton::Primary) {
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+        }
+        if drag.double_clicked() {
+            let maxed = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!maxed));
+        }
         ui.painter().line_segment(
             [pos2(full.min.x, full.max.y - 0.5), pos2(full.max.x, full.max.y - 0.5)],
             egui::Stroke::new(1.0, theme::RULE_DARK),
@@ -529,10 +571,119 @@ pub fn chrome_bar(ui: &mut Ui, id: &str, left: impl FnOnce(&mut Ui), right: impl
         ui.horizontal_centered(|ui| {
             left(ui);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                window_controls(ui);
+                if help_cell(ui) {
+                    ui.ctx().data_mut(|d| d.insert_temp(help_flag(), true));
+                }
                 right(ui);
             });
         });
     });
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum WinButton {
+    Minimize,
+    Maximize,
+    Close,
+}
+
+/// Minimize, maximize/restore and close, drawn in the Grease Pencil style.
+fn window_controls(ui: &mut Ui) {
+    let ctx = ui.ctx().clone();
+    let maxed = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
+    for b in [WinButton::Close, WinButton::Maximize, WinButton::Minimize] {
+        let (rect, resp) = ui.allocate_exact_size(vec2(52.0, HEADER_H), Sense::click());
+        let label = match b {
+            WinButton::Minimize => "Minimize",
+            WinButton::Maximize => if maxed { "Restore" } else { "Maximize" },
+            WinButton::Close => "Close",
+        };
+        resp.widget_info(|| WidgetInfo::labeled(Role::Button, true, label));
+        let hover = resp.hovered();
+        if hover {
+            let bg = if b == WinButton::Close { theme::RED } else { theme::RULE_DARK };
+            ui.painter().rect_filled(rect, 0.0, bg);
+        }
+        let c = rect.center();
+        let col = if hover && b == WinButton::Close { theme::PAPER_WHITE } else { theme::TABLE };
+        let s = egui::Stroke::new(1.6, col);
+        let p = ui.painter();
+        match b {
+            WinButton::Minimize => {
+                p.line_segment([c + vec2(-6.0, 0.5), c + vec2(6.0, 0.5)], s);
+            }
+            WinButton::Maximize => {
+                if maxed {
+                    p.rect_stroke(Rect::from_center_size(c + vec2(-1.5, 1.5), vec2(9.0, 9.0)), 0.0, s, egui::StrokeKind::Middle);
+                    p.line_segment([c + vec2(-3.0, -4.5), c + vec2(6.0, -4.5)], s);
+                    p.line_segment([c + vec2(6.0, -4.5), c + vec2(6.0, 4.5)], s);
+                } else {
+                    p.rect_stroke(Rect::from_center_size(c, vec2(11.0, 11.0)), 0.0, s, egui::StrokeKind::Middle);
+                }
+            }
+            WinButton::Close => {
+                p.line_segment([c + vec2(-6.0, -6.0), c + vec2(6.0, 6.0)], s);
+                p.line_segment([c + vec2(6.0, -6.0), c + vec2(-6.0, 6.0)], s);
+            }
+        }
+        theme::focus_ring(ui, &resp);
+        if resp.clicked() {
+            match b {
+                WinButton::Minimize => ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true)),
+                WinButton::Maximize => ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!maxed)),
+                WinButton::Close => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+            }
+        }
+    }
+    cell_rule(ui);
+}
+
+/// HELP cell with its F1 key cap.
+fn help_cell(ui: &mut Ui) -> bool {
+    let (rect, resp) = ui.allocate_exact_size(vec2(96.0, HEADER_H), Sense::click());
+    resp.widget_info(|| WidgetInfo::labeled(Role::Button, true, "Help"));
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, 0.0, theme::RULE_DARK);
+    }
+    theme::text_at(ui, pos2(rect.min.x + 16.0, rect.center().y), Align2::LEFT_CENTER, "HELP", theme::f_mono_semi(10.5), theme::TABLE, 0.84);
+    theme::keycap(ui, pos2(rect.max.x - 14.0, rect.center().y), "F1", theme::TABLE);
+    theme::focus_ring(ui, &resp);
+    cell_rule(ui);
+    resp.clicked()
+}
+
+/// Resize from the window edges (the window has no system frame).
+fn resize_edges(ctx: &egui::Context) {
+    if ctx.input(|i| i.viewport().maximized.unwrap_or(false)) {
+        return;
+    }
+    let r = ctx.content_rect();
+    let Some(p) = ctx.input(|i| i.pointer.hover_pos()) else { return };
+    const E: f32 = 5.0;
+    let (l, rt, t, b) = (p.x - r.min.x < E, r.max.x - p.x < E, p.y - r.min.y < E, r.max.y - p.y < E);
+    use egui::viewport::ResizeDirection as D;
+    let dir = match (l, rt, t, b) {
+        (true, _, true, _) => Some(D::NorthWest),
+        (_, true, true, _) => Some(D::NorthEast),
+        (true, _, _, true) => Some(D::SouthWest),
+        (_, true, _, true) => Some(D::SouthEast),
+        (true, _, _, _) => Some(D::West),
+        (_, true, _, _) => Some(D::East),
+        (_, _, true, _) => Some(D::North),
+        (_, _, _, true) => Some(D::South),
+        _ => None,
+    };
+    let Some(dir) = dir else { return };
+    ctx.set_cursor_icon(match dir {
+        D::North | D::South => egui::CursorIcon::ResizeVertical,
+        D::East | D::West => egui::CursorIcon::ResizeHorizontal,
+        D::NorthWest | D::SouthEast => egui::CursorIcon::ResizeNwSe,
+        D::NorthEast | D::SouthWest => egui::CursorIcon::ResizeNeSw,
+    });
+    if ctx.input(|i| i.pointer.primary_pressed()) {
+        ctx.send_viewport_cmd(egui::ViewportCommand::BeginResize(dir));
+    }
 }
 
 /// Vertical 1 px rule between cells.
@@ -600,9 +751,38 @@ pub fn glim_cell(app: &mut BestOfBurstApp, ui: &mut Ui, mood: super::glim::Mood)
     cell_rule(ui);
 }
 
-/// The status line shown in the header ("CPU x 3 THREADS").
+/// The live status line shown in the header.
 pub fn engine_status(app: &BestOfBurstApp) -> String {
-    format!("Engine · CPU × {} threads", app.threads)
+    let s = app.sys();
+    let gpu = match (app.settings.engine, crate::gpu::status()) {
+        (EngineChoice::Cpu, _) => "GPU off".to_string(),
+        (_, Some(Ok(_))) => match s.gpu_total {
+            Some(u) => format!("GPU {u:.0}%"),
+            None => "GPU on".into(),
+        },
+        (_, Some(Err(_))) => "No GPU".into(),
+        (_, None) => "GPU ...".into(),
+    };
+    format!("{gpu} · CPU {:.0}% · {} threads", s.cpu_total, app.threads)
+}
+
+/// Short GPU description for Home and the live panel.
+pub fn gpu_line(s: &Snapshot) -> (String, String) {
+    match crate::gpu::status() {
+        None => ("Checking the graphics card...".into(), String::new()),
+        Some(Err(why)) => ("Not available".into(), why),
+        Some(Ok(info)) => {
+            let cores = s.gpu_cores.or_else(|| sysmon::known_cores(&info.name));
+            let mut detail = format!("{} · {}", info.backend, info.device_type);
+            if let Some(c) = cores {
+                detail.push_str(&format!(" · {} cores", theme::thousands(c as usize)));
+            }
+            if let Some(t) = s.gpu_mem_total_mb {
+                detail.push_str(&format!(" · {} MB memory", theme::thousands(t as usize)));
+            }
+            (info.name, detail)
+        }
+    }
 }
 
 /// Toast line for the last message, if any.
@@ -659,7 +839,7 @@ impl eframe::App for BestOfBurstApp {
 
         // Done is always the light table; Processing and Focus are always the darkroom.
         let surface_night = match self.screen {
-            Screen::Done | Screen::Corner => false,
+            Screen::Done | Screen::Corner | Screen::Help => false,
             Screen::Progress | Screen::Focus | Screen::Compare => true,
             _ => self.settings.night,
         };
@@ -673,6 +853,12 @@ impl eframe::App for BestOfBurstApp {
             Screen::Compare => compare::show(self, ui),
             Screen::Done => done::show(self, ui),
             Screen::Corner => corner::show(self, ui),
+            Screen::Help => help::show(self, ui),
+        }
+        resize_edges(&ctx);
+        let asked = ctx.data_mut(|d| d.remove_temp::<bool>(help_flag()).unwrap_or(false));
+        if asked || (!ctx.egui_wants_keyboard_input() && ctx.input(|i| i.key_pressed(egui::Key::F1))) {
+            self.open_help();
         }
 
         if self.settings != self.saved_settings {
@@ -682,6 +868,9 @@ impl eframe::App for BestOfBurstApp {
         if !self.reduced_motion {
             // Glim's calm idle loop and mark draw-on.
             ctx.request_repaint_after(Duration::from_millis(50));
+        } else {
+            // Live readings still refresh.
+            ctx.request_repaint_after(Duration::from_millis(700));
         }
     }
 }

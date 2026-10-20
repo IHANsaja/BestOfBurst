@@ -22,12 +22,40 @@ pub struct Metrics {
 const T: usize = 8;
 const LUMA: [f32; 3] = [0.2126, 0.7152, 0.0722];
 
+/// Raw per-tile sums of one image: what both the CPU and the GPU path produce, so the
+/// finishing math (sorting, medians, the formulas) is shared and identical.
+#[derive(Clone, Debug)]
+pub struct TileSums {
+    /// Per tile, over interior pixels: 0 count, 1 luma-128, 2 (luma-128)^2, 3 lap, 4 lap^2,
+    /// 5 sobel energy, 6 |noise kernel|, 7 rg, 8 rg^2, 9 yb, 10 yb^2.
+    pub tiles: [[f64; 11]; 64],
+    /// Pixels with luma under 4.5, and with any channel >= 251, over all pixels.
+    pub lo: u64,
+    pub hi: u64,
+    pub n_all: f64,
+}
+
+/// dHash grid: summed luma and pixel count per cell of a 9 x 8 grid.
+#[derive(Clone, Debug)]
+pub struct HashCells {
+    pub sums: [[f64; 9]; 8],
+    pub counts: [[f64; 9]; 8],
+}
+
 /// One pass over an 8 x 8 tile grid. Returns the metrics and the Laplacian variance of every
 /// tile in row-major order (0 for an empty tile).
 pub fn analyze(img: &RgbImage) -> (Metrics, [f32; 64]) {
+    match tile_sums(img) {
+        Some(s) => finish(&s),
+        None => (Metrics::default(), [0.0; 64]),
+    }
+}
+
+/// The CPU pass that fills [`TileSums`].
+pub fn tile_sums(img: &RgbImage) -> Option<TileSums> {
     let (w, h) = (img.width as usize, img.height as usize);
     if w < 3 || h < 3 {
-        return (Metrics::default(), [0.0; 64]);
+        return None;
     }
     let luma: Vec<f32> = img
         .rgb
@@ -46,12 +74,8 @@ pub fn analyze(img: &RgbImage) -> (Metrics, [f32; 64]) {
             hi += 1;
         }
     }
-    let n_all = (w * h) as f64;
 
-    // Per-tile sums over interior pixels:
-    // 0 count, 1 luma-128, 2 (luma-128)^2, 3 lap, 4 lap^2, 5 sobel energy,
-    // 6 |noise kernel|, 7 rg, 8 rg^2, 9 yb, 10 yb^2
-    let mut tiles = vec![[0f64; 11]; T * T];
+    let mut tiles = [[0f64; 11]; T * T];
     for y in 1..h - 1 {
         let ty = y * T / h;
         let (up, row, down) = ((y - 1) * w, y * w, (y + 1) * w);
@@ -94,17 +118,22 @@ pub fn analyze(img: &RgbImage) -> (Metrics, [f32; 64]) {
             }
         }
     }
+    Some(TileSums { tiles, lo, hi, n_all: (w * h) as f64 })
+}
+
+/// Turn tile sums into the eight metrics and the tile sharpness.
+pub fn finish(s: &TileSums) -> (Metrics, [f32; 64]) {
     let var = |s: f64, q: f64, n: f64| (q / n - (s / n).powi(2)).max(0.0);
 
     // Tile sharpness for subject comparison, before empty tiles are dropped.
     let mut tile_sharp = [0f32; 64];
-    for (k, t) in tiles.iter().enumerate() {
+    for (k, t) in s.tiles.iter().enumerate() {
         if t[0] > 0.0 {
             tile_sharp[k] = (var(t[3], t[4], t[0]) * 10.0).round() as f32 / 10.0;
         }
     }
 
-    let tiles: Vec<[f64; 11]> = tiles.into_iter().filter(|t| t[0] > 0.0).collect();
+    let tiles: Vec<[f64; 11]> = s.tiles.iter().copied().filter(|t| t[0] > 0.0).collect();
     if tiles.is_empty() {
         return (Metrics::default(), tile_sharp);
     }
@@ -135,8 +164,8 @@ pub fn analyze(img: &RgbImage) -> (Metrics, [f32; 64]) {
         sharpness: mean(&lapv[..top_k]) as f32,
         tenengrad: mean(&ten[..top_k]) as f32,
         mean_luma: ((sum(1) / n + 128.0) / 255.0) as f32,
-        clip_shadows: (lo as f64 / n_all) as f32,
-        clip_highlights: (hi as f64 / n_all) as f32,
+        clip_shadows: (s.lo as f64 / s.n_all) as f32,
+        clip_highlights: (s.hi as f64 / s.n_all) as f32,
         contrast: (var(sum(1), sum(2), n).sqrt() / 255.0) as f32,
         noise: sig[sig.len() / 2] as f32,
         colorfulness: ((srg * srg + syb * syb).sqrt() + 0.3 * (mrg * mrg + myb * myb).sqrt()) as f32,
@@ -150,8 +179,7 @@ pub fn dhash(img: &RgbImage) -> u64 {
     if w == 0 || h == 0 {
         return 0;
     }
-    let mut cells = [[0f64; 9]; 8];
-    let mut counts = [[0u32; 9]; 8];
+    let mut cells = HashCells { sums: [[0f64; 9]; 8], counts: [[0f64; 9]; 8] };
     for y in 0..h {
         let r = y * 8 / h;
         for x in 0..w {
@@ -160,15 +188,20 @@ pub fn dhash(img: &RgbImage) -> u64 {
                 + LUMA[1] as f64 * img.rgb[i + 1] as f64
                 + LUMA[2] as f64 * img.rgb[i + 2] as f64;
             let c = x * 9 / w;
-            cells[r][c] += v;
-            counts[r][c] += 1;
+            cells.sums[r][c] += v;
+            cells.counts[r][c] += 1.0;
         }
     }
+    dhash_from_cells(&cells)
+}
+
+/// The dHash bits from the 9 x 8 cell averages.
+pub fn dhash_from_cells(cells: &HashCells) -> u64 {
     let mut hash = 0u64;
     for r in 0..8 {
         for c in 0..8 {
-            let a = cells[r][c] / counts[r][c].max(1) as f64;
-            let b = cells[r][c + 1] / counts[r][c + 1].max(1) as f64;
+            let a = cells.sums[r][c] / cells.counts[r][c].max(1.0);
+            let b = cells.sums[r][c + 1] / cells.counts[r][c + 1].max(1.0);
             if a < b {
                 hash |= 1 << (r * 8 + c);
             }
@@ -253,7 +286,7 @@ pub fn fnv1a_hex(s: &str) -> String {
 
 /// Save the analysis image as a 320 px JPEG (quality 80).
 pub fn write_thumb(img: &RgbImage, dest: &Path) -> anyhow::Result<()> {
-    let small = crate::decode::resize_long_edge(img.clone(), 320)?;
+    let small = if img.width.max(img.height) <= 320 { img.clone() } else { crate::decode::resize_long_edge(img.clone(), 320)? };
     if let Some(dir) = dest.parent() {
         std::fs::create_dir_all(dir)?;
     }

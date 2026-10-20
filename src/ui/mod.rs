@@ -7,6 +7,7 @@ pub mod corner;
 pub mod done;
 pub mod focus;
 pub mod glim;
+pub mod help;
 pub mod home;
 pub mod marks;
 pub mod progress;
@@ -24,6 +25,7 @@ pub fn run(folder: Option<PathBuf>) -> anyhow::Result<()> {
             .with_inner_size([1360.0, 860.0])
             .with_min_inner_size([1100.0, 700.0])
             .with_drag_and_drop(true)
+            .with_decorations(false)
             .with_icon(window_icon()),
         ..Default::default()
     };

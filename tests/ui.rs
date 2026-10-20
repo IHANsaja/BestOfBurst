@@ -86,7 +86,25 @@ fn window_flow() {
     snapshot(&mut h, "1_home");
     let info = h.state().folder_info.clone().unwrap();
     assert_eq!((info.total, info.analyzed, info.new), (15, 15, 0));
-    h.get_by_label("Open contact sheet").click();
+    // Help (F1) and back.
+    h.key_press(Key::F1);
+    settle(&mut h, |a| a.screen == Screen::Help);
+    assert_eq!(screen(&h), Screen::Help);
+    snapshot(&mut h, "1a_help");
+    h.key_press(Key::Escape);
+    settle(&mut h, |a| a.screen == Screen::Home);
+
+    // Develop again: Processing with the live engine panel, then the contact sheet.
+    h.get_by_label("Help: Engine").click();
+    settle(&mut h, |_| true);
+    snapshot(&mut h, "1b_home_engine_help");
+    h.get_by_label("Develop again").click();
+    settle(&mut h, |a| a.prog.finished);
+    assert!(h.state().prog.finished);
+    std::thread::sleep(Duration::from_millis(900));
+    settle(&mut h, |_| true);
+    snapshot(&mut h, "1c_processing");
+    h.get_by_label("Open contact sheet →").click();
     settle(&mut h, |a| a.screen == Screen::Review);
     assert_eq!(screen(&h), Screen::Review);
     snapshot(&mut h, "2_sheet");

@@ -38,6 +38,8 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
         app.open_corner();
     }
 
+    live_panel(app, ui);
+
     let frame = egui::Frame::new().fill(theme::INK).inner_margin(48.0);
     let mut open_sheet = false;
     let mut pause = false;
@@ -205,4 +207,109 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
 
 fn fmt(n: usize) -> String {
     theme::thousands(n)
+}
+
+/// "Engine live": what the processor and graphics card are doing right now.
+fn live_panel(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
+    let snap = app.sys();
+    let st = crate::stats::STATS.view();
+    let p = theme::pal(true);
+    let frame = egui::Frame::new().fill(theme::FILM).inner_margin(24.0);
+    egui::Panel::right("engine_live").exact_size(380.0).resizable(false).frame(frame).show(ui, |ui| {
+        theme::dark_scope(ui);
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            ui.set_max_width(ui.available_width() - 14.0);
+            let gpu_on = st.engine == 2;
+            ui.horizontal(|ui| {
+                ui.label(theme::xp("Engine live", 18.0, theme::TABLE));
+                ui.add_space(6.0);
+                let _ = super::help::toggle(ui, "live", "Engine live");
+            });
+            if ui.ctx().data_mut(|d| *d.get_temp_mut_or_insert_with(help_id(), || false)) {
+                super::help::card(ui, super::help::LIVE, true);
+            }
+            ui.label(theme::mono(if gpu_on { "GPU + CPU" } else { "CPU only" }, 10.5, theme::SAFELIGHT));
+            ui.add_space(10.0);
+
+            // Processor.
+            ui.label(theme::mono("Processor", 11.0, theme::ASH));
+            theme::ruler(ui, p, "Whole computer", snap.cpu_total / 100.0, None, &format!("{:.0}%", snap.cpu_total));
+            theme::ruler(ui, p, "BestOfBurst", snap.cpu_app / 100.0, None, &format!("{:.0}%", snap.cpu_app));
+            stat(ui, "Cores", &format!("{} cores · {} logical", snap.physical, snap.logical));
+            stat(ui, "Workers", &format!("{} busy of {}", st.busy, st.threads.max(app.threads)));
+            stat(ui, "  opening photos", &format!("{}", st.decoding));
+            if gpu_on {
+                stat(ui, "  on the graphics card", &format!("{}", st.on_gpu));
+            }
+            ui.add_space(12.0);
+
+            // Graphics card.
+            ui.label(theme::mono("Graphics card", 11.0, theme::ASH));
+            let (gname, gdetail) = app::gpu_line(&snap);
+            ui.label(theme::body(&gname, 14.0, theme::TABLE));
+            if !gdetail.is_empty() {
+                ui.label(egui::RichText::new(&gdetail).font(theme::f_mono(10.0)).color(theme::ASH));
+            }
+            if let Some(u) = snap.gpu_total {
+                theme::ruler(ui, p, "Whole card", u / 100.0, None, &format!("{u:.0}%"));
+            }
+            if let Some(u) = snap.gpu_app {
+                theme::ruler(ui, p, "BestOfBurst", u / 100.0, None, &format!("{u:.0}%"));
+            }
+            let cores = snap.gpu_cores.or_else(|| match crate::gpu::status() {
+                Some(Ok(i)) => crate::sysmon::known_cores(&i.name),
+                _ => None,
+            });
+            if let Some(c) = cores {
+                let busy = snap.gpu_app.or(snap.gpu_total).unwrap_or(0.0) / 100.0 * c as f32;
+                stat(ui, "Cores", &format!("{} total · about {} busy", theme::thousands(c as usize), theme::thousands(busy.round() as usize)));
+            } else {
+                stat(ui, "Cores", "not reported by this driver");
+            }
+            if let (Some(u), Some(t)) = (snap.gpu_mem_used_mb, snap.gpu_mem_total_mb) {
+                theme::ruler(ui, p, "Video memory", u as f32 / t.max(1) as f32, None, &format!("{} / {} MB", theme::thousands(u as usize), theme::thousands(t as usize)));
+            }
+            if let Some(Ok(i)) = crate::gpu::status() {
+                ui.label(theme::body("Parallel work", 13.0, theme::ASH));
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{} threads per group, 64 groups per photo (card allows {} per group)",
+                        crate::gpu::THREADS_PER_GROUP,
+                        i.max_invocations_per_group
+                    ))
+                    .font(theme::f_mono(10.0))
+                    .color(theme::TABLE),
+                );
+            }
+            ui.add_space(12.0);
+
+            // Per photo.
+            ui.label(theme::mono("Per photo", 11.0, theme::ASH));
+            stat(ui, "Opening (CPU)", &format!("{:.0} ms", st.decode_ms_avg));
+            if st.gpu_photos > 0 {
+                stat(ui, "Measuring (GPU)", &format!("{:.0} ms", st.gpu_ms_avg));
+            }
+            if st.cpu_photos > 0 {
+                stat(ui, "Measuring (CPU)", &format!("{:.0} ms", st.cpu_ms_avg));
+            }
+            stat(ui, "Done on", &format!("GPU {} · CPU {}", theme::thousands(st.gpu_photos as usize), theme::thousands(st.cpu_photos as usize)));
+            if st.gpu_fallbacks > 0 {
+                stat(ui, "GPU fell back", &format!("{} photos (done on the CPU instead)", st.gpu_fallbacks));
+            }
+        });
+    });
+}
+
+fn help_id() -> egui::Id {
+    #[allow(deprecated)]
+    egui::Id::new(("bob_help", "live"))
+}
+
+fn stat(ui: &mut egui::Ui, k: &str, v: &str) {
+    ui.horizontal(|ui| {
+        ui.label(theme::body(k, 13.0, theme::ASH));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(egui::RichText::new(v).font(theme::f_mono(10.5)).color(theme::TABLE));
+        });
+    });
 }

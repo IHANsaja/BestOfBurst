@@ -10,10 +10,13 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use rayon::prelude::*;
 
-use crate::analyze::{analyze, capture_ms, dhash, fnv1a_hex, write_thumb};
+use crate::analyze::{analyze, capture_ms, dhash, dhash_from_cells, finish, fnv1a_hex, write_thumb};
+use crate::gpu;
+use crate::stats::{self, STATS};
+use std::sync::atomic::Ordering::Relaxed;
 use crate::decode::{self, Decoder};
 use crate::output::{self, OutputOptions, OutputSummary};
 use crate::rank::{self, Keep, Preset, Ranking};
@@ -33,6 +36,46 @@ pub struct RunConfig {
     pub max_per_group: usize,
     pub output: OutputOptions,
     pub retry_failed: bool,
+    /// Which hardware analyzes the decoded photos.
+    pub engine: EngineChoice,
+}
+
+/// Auto uses the graphics card when one works and the processor otherwise.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum EngineChoice {
+    #[default]
+    Auto,
+    Gpu,
+    Cpu,
+}
+
+impl EngineChoice {
+    pub fn name(self) -> &'static str {
+        match self {
+            EngineChoice::Auto => "auto",
+            EngineChoice::Gpu => "gpu",
+            EngineChoice::Cpu => "cpu",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "auto" => Some(EngineChoice::Auto),
+            "gpu" => Some(EngineChoice::Gpu),
+            "cpu" => Some(EngineChoice::Cpu),
+            _ => None,
+        }
+    }
+}
+
+/// The GPU to use for a run, or why there is none.
+pub fn resolve_gpu(choice: EngineChoice) -> (Option<Arc<gpu::Gpu>>, Option<String>) {
+    match choice {
+        EngineChoice::Cpu => (None, None),
+        EngineChoice::Auto | EngineChoice::Gpu => match gpu::get() {
+            Ok(g) => (Some(g), None),
+            Err(e) => (None, Some(e)),
+        },
+    }
 }
 
 impl RunConfig {
@@ -47,6 +90,7 @@ impl RunConfig {
             max_per_group: 1,
             output: OutputOptions::default(),
             retry_failed: false,
+            engine: EngineChoice::Auto,
         }
     }
 }
@@ -69,6 +113,8 @@ pub enum Event {
         last_thumb: Option<PathBuf>,
     },
     Failed { path: String, error: String },
+    /// Which engine the run uses, in words.
+    Engine(String),
 }
 
 pub struct AnalyzeOutcome {
@@ -89,14 +135,59 @@ fn primary_decoder(format: Format) -> Decoder {
     }
 }
 
-fn analyze_one(item: &ScanItem, out: &Path) -> Result<FileEntry> {
-    let d = decode::decode_for_analysis(&item.abs, item.format)?;
-    let (metrics, tiles) = analyze(&d.image);
-    let hash = dhash(&d.image);
-    let captured = capture_ms(&item.abs, item.format, item.mtime_ms);
+fn us(t: Instant) -> u64 {
+    t.elapsed().as_micros() as u64
+}
+
+fn analyze_one(item: &ScanItem, out: &Path, gpu: Option<&gpu::Gpu>) -> Result<FileEntry> {
+    let t = Instant::now();
+    let d = {
+        let _b = stats::Busy::new(&STATS.decoding);
+        decode::decode_full(&item.abs, item.format)?
+    };
+    STATS.decode_us.fetch_add(us(t), Relaxed);
+    if d.image.width < decode::MIN_EDGE || d.image.height < decode::MIN_EDGE {
+        bail!("too small");
+    }
     let id = fnv1a_hex(&item.rel);
     let thumb_path = out.join("thumbs").join(format!("{id}.jpg"));
-    let thumb = write_thumb(&d.image, &thumb_path).ok().map(|_| format!("thumbs\\{id}.jpg"));
+
+    // GPU first when there is one; any GPU error falls back to the CPU for this photo.
+    let mut done = None;
+    if let Some(g) = gpu {
+        let t = Instant::now();
+        let r = {
+            let _b = stats::Busy::new(&STATS.on_gpu);
+            g.analyze(&d.image, decode::ANALYSIS_EDGE, 320)
+        };
+        match r {
+            Ok(o) => {
+                STATS.gpu_us.fetch_add(us(t), Relaxed);
+                STATS.gpu_photos.fetch_add(1, Relaxed);
+                let (metrics, tiles) = finish(&o.sums);
+                let thumb = write_thumb(&o.thumb, &thumb_path).ok();
+                done = Some((metrics, tiles, dhash_from_cells(&o.cells), thumb));
+            }
+            Err(_) => {
+                STATS.gpu_fallbacks.fetch_add(1, Relaxed);
+            }
+        }
+    }
+    let (metrics, tiles, hash, thumb) = match done {
+        Some(x) => x,
+        None => {
+            let t = Instant::now();
+            let image = decode::resize_long_edge(d.image, decode::ANALYSIS_EDGE)?;
+            let (metrics, tiles) = analyze(&image);
+            let hash = dhash(&image);
+            let thumb = write_thumb(&image, &thumb_path).ok();
+            STATS.cpu_analyze_us.fetch_add(us(t), Relaxed);
+            STATS.cpu_photos.fetch_add(1, Relaxed);
+            (metrics, tiles, hash, thumb)
+        }
+    };
+    let captured = capture_ms(&item.abs, item.format, item.mtime_ms);
+    let thumb = thumb.map(|_| format!("thumbs\\{id}.jpg"));
     Ok(FileEntry {
         size: item.size,
         mtime_ms: item.mtime_ms,
@@ -112,8 +203,14 @@ fn analyze_one(item: &ScanItem, out: &Path) -> Result<FileEntry> {
     })
 }
 
-/// Decode and analyze one file. A decoder error or panic is recorded as `failed`.
+/// Decode and analyze one file on the CPU. A decoder error or panic is recorded as `failed`.
 pub fn process(item: &ScanItem, out: &Path) -> FileEntry {
+    process_with(item, out, None)
+}
+
+/// Decode and analyze one file, on the GPU when given one.
+pub fn process_with(item: &ScanItem, out: &Path, gpu: Option<&gpu::Gpu>) -> FileEntry {
+    let _b = stats::Busy::new(&STATS.busy);
     let failed = |error: String| FileEntry {
         size: item.size,
         mtime_ms: item.mtime_ms,
@@ -127,7 +224,7 @@ pub fn process(item: &ScanItem, out: &Path) -> FileEntry {
         thumb: None,
         tiles: None,
     };
-    match catch_unwind(AssertUnwindSafe(|| analyze_one(item, out))) {
+    match catch_unwind(AssertUnwindSafe(|| analyze_one(item, out, gpu))) {
         Ok(Ok(entry)) => entry,
         Ok(Err(e)) => failed(format!("{e:#}").split_whitespace().collect::<Vec<_>>().join(" ")),
         Err(_) => failed("decoder crashed".into()),
@@ -175,6 +272,18 @@ pub fn analyze_folder(cfg: &RunConfig, stop: &Arc<AtomicBool>, mut on_event: imp
         return Ok(outcome);
     }
 
+    let (gpu_dev, gpu_why) = resolve_gpu(cfg.engine);
+    STATS.reset(cfg.threads.max(1), gpu_dev.is_some());
+    let engine_text = match (&gpu_dev, &gpu_why) {
+        (Some(g), _) => format!("GPU ({}, {}) + {} CPU threads for decoding", g.info.name, g.info.backend, cfg.threads.max(1)),
+        (None, Some(why)) => format!("CPU only, {} threads (GPU unavailable: {why})", cfg.threads.max(1)),
+        (None, None) => format!("CPU only, {} threads", cfg.threads.max(1)),
+    };
+    if cfg.engine == EngineChoice::Gpu && gpu_dev.is_none() {
+        on_event(Event::Warning(format!("GPU requested but unavailable; using the CPU. {}", gpu_why.clone().unwrap_or_default())));
+    }
+    on_event(Event::Engine(engine_text));
+
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(cfg.threads.max(1))
         .thread_name(|i| format!("bob-analyze-{i}"))
@@ -194,7 +303,7 @@ pub fn analyze_folder(cfg: &RunConfig, stop: &Arc<AtomicBool>, mut on_event: imp
                 if worker_stop.load(Ordering::Relaxed) {
                     return;
                 }
-                let entry = process(item, &out_dir);
+                let entry = process_with(item, &out_dir, gpu_dev.as_deref());
                 let _ = tx.send((item.clone(), entry));
             });
         });

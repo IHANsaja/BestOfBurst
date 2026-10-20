@@ -47,6 +47,30 @@ maybe, a **cross** means set aside, and **?** marks a close call.
    spend them here, or play **Sharp Eye** with frames from your own shoot.
 
 After 20 minutes of review a dismissable **safelight break** suggests resting your eyes.
+Every option has a **?** button with a plain-language explanation, and **Help (F1)** explains the
+whole app. The window draws its own title bar in the same style: drag it to move, double-click to
+maximize, and resize from any edge.
+
+### GPU and CPU
+
+Home's **Engine** setting picks the hardware: **Auto** (the graphics card when one works, else the
+processor), **GPU** or **CPU**. Opening (decoding) each photo always runs on the CPU. With the GPU,
+the graphics card then does the resize to 2,048 px, the measurements, the dHash and the thumbnail
+through wgpu compute shaders (DirectX 12 or Vulkan). Any GPU problem falls back to the CPU for
+that photo, and the results match the CPU path to about four significant digits.
+
+The Processing screen shows the engine live: processor use (whole computer and BestOfBurst),
+cores and busy workers, graphics-card use, cores (NVIDIA reports them; other drivers do not),
+video memory, and the average time per photo for each step.
+
+Measured on an Intel i5-3330 (4 cores) with a GeForce GTX 650 Ti, 40 photos of 24 MP:
+
+| Engine | Threads | Photos per second |
+| --- | --- | --- |
+| CPU | 3 (default) | 4.6 |
+| GPU | 3 (default) | 5.7 |
+| CPU | 4 | 6.5 |
+| GPU | 4 | 7.0 |
 The day/night table choice and Glim's state are saved in `%APPDATA%\bestofburst\settings.json`.
 
 | Where | Key | Action |
@@ -77,10 +101,11 @@ Command line:
 bestofburst run <FOLDER> [--keep <N> | --keep-percent <P>] [--preset <general|portrait|sports|landscape>]
                   [--out <DIR>] [--threads <N>] [--max-per-group <N>]
                   [--maybe] [--rejects] [--copy] [--keep-names] [--retry-failed]
+                  [--engine <auto|gpu|cpu>]
 bestofburst rank <FOLDER> [same ranking and output flags as run]   # re-rank from state.json only
 bestofburst status <FOLDER> [--out <DIR>]
 bestofburst ui [FOLDER]
-bestofburst probe <FILE>
+bestofburst probe <FILE>                                            # also compares GPU with CPU
 ```
 
 Output goes to `<FOLDER>\_bestofburst\` (`picks`, optional `maybe` and `rejects`, `report.csv`,

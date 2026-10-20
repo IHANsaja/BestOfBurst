@@ -88,6 +88,9 @@ struct RunArgs {
     /// Re-analyze files marked failed (useful after installing a codec).
     #[arg(long)]
     retry_failed: bool,
+    /// Analysis hardware: auto (GPU when one works), gpu, or cpu.
+    #[arg(long, default_value = "auto", value_parser = ["auto", "gpu", "cpu"])]
+    engine: String,
 }
 
 #[derive(Args)]
@@ -182,6 +185,7 @@ fn cmd_run(a: RunArgs) -> Result<()> {
         cfg.threads = t.max(1);
     }
     cfg.retry_failed = a.retry_failed;
+    cfg.engine = engine::EngineChoice::parse(&a.engine).unwrap_or_default();
     let started = Instant::now();
 
     let stop = Arc::new(AtomicBool::new(false));
@@ -200,6 +204,7 @@ fn cmd_run(a: RunArgs) -> Result<()> {
     let mut codec_missing = false;
     let outcome = engine::analyze_folder(&cfg, &stop, |ev| match ev {
         Event::Warning(w) => eprintln!("{w}"),
+        Event::Engine(e) => println!("Engine: {e}"),
         Event::Scanned { total, new, already } => {
             println!(
                 "Scanning... {} images ({} new, {} already analyzed)",
@@ -245,6 +250,18 @@ fn cmd_run(a: RunArgs) -> Result<()> {
         println!("Hard links not supported here; copying files.");
     }
     println!("Done in {}", elapsed(started.elapsed().as_secs()));
+    let st = bestofburst::stats::STATS.view();
+    if st.gpu_photos + st.cpu_photos > 0 {
+        println!(
+            "  Engine:  GPU {} photos ({:.0} ms each), CPU {} photos ({:.0} ms each), decode {:.0} ms each{}",
+            thousands(st.gpu_photos as usize),
+            st.gpu_ms_avg,
+            thousands(st.cpu_photos as usize),
+            st.cpu_ms_avg,
+            st.decode_ms_avg,
+            if st.gpu_fallbacks > 0 { format!(", {} GPU fallbacks", st.gpu_fallbacks) } else { String::new() }
+        );
+    }
     print_summary(&ranking.summary, &out_sum.picks_dir, &cfg);
     for e in out_sum.errors.iter().take(5) {
         eprintln!("  could not place {e}");
@@ -389,10 +406,40 @@ fn cmd_probe(file: &Path) -> Result<()> {
         println!("  {}", row.iter().map(|v| format!("{v:>8.0}")).collect::<String>());
     }
     println!(
-        "Timing:    decode {:.0} ms, resize {:.0} ms, analyze {:.0} ms",
+        "Timing:    decode {:.0} ms, resize {:.0} ms, analyze {:.0} ms (CPU)",
         t_decode.as_secs_f64() * 1000.0,
         t_resize.as_secs_f64() * 1000.0,
         t_analyze.as_secs_f64() * 1000.0
     );
+    match bestofburst::gpu::get() {
+        Err(why) => println!("GPU:       not used ({why})"),
+        Ok(g) => {
+            let full = decode::decode_full(file, format)?;
+            let _ = g.analyze(&full.image, decode::ANALYSIS_EDGE, 320); // warm-up
+            let t = Instant::now();
+            match g.analyze(&full.image, decode::ANALYSIS_EDGE, 320) {
+                Ok(o) => {
+                    let (gm, _) = analyze::finish(&o.sums);
+                    let gh = analyze::dhash_from_cells(&o.cells);
+                    println!("GPU:       {} ({}, {})", g.info.name, g.info.backend, g.info.device_type);
+                    println!(
+                        "  resize + analyze + hash + thumbnail {:.0} ms  (CPU: {:.0} ms)",
+                        t.elapsed().as_secs_f64() * 1000.0,
+                        (t_resize + t_analyze).as_secs_f64() * 1000.0
+                    );
+                    println!(
+                        "  sharpness {:.1} (CPU {:.1}) · luma {:.3} · contrast {:.3} · noise {:.2} · dHash distance {}",
+                        gm.sharpness,
+                        m.sharpness,
+                        gm.mean_luma,
+                        gm.contrast,
+                        gm.noise,
+                        analyze::hamming(gh, hash)
+                    );
+                }
+                Err(e) => println!("GPU:       failed on this photo ({e:#}); the CPU would be used"),
+            }
+        }
+    }
     Ok(())
 }

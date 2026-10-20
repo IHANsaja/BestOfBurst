@@ -210,15 +210,22 @@ pub fn decode_full(path: &Path, format: Format) -> Result<Decoded> {
     }
 }
 
-/// Downscale so the long edge is at most `edge` (never upscale), using Catmull-Rom.
-pub fn resize_long_edge(img: RgbImage, edge: u32) -> Result<RgbImage> {
-    let long = img.width.max(img.height);
+/// Size after shrinking the long edge to at most `edge` (never upscaling).
+pub fn target_dims(w: u32, h: u32, edge: u32) -> (u32, u32) {
+    let long = w.max(h);
     if long <= edge {
-        return Ok(img);
+        return (w, h);
     }
     let scale = edge as f64 / long as f64;
-    let nw = ((img.width as f64 * scale).round() as u32).max(1);
-    let nh = ((img.height as f64 * scale).round() as u32).max(1);
+    (((w as f64 * scale).round() as u32).max(1), ((h as f64 * scale).round() as u32).max(1))
+}
+
+/// Downscale so the long edge is at most `edge` (never upscale), using Catmull-Rom.
+pub fn resize_long_edge(img: RgbImage, edge: u32) -> Result<RgbImage> {
+    if img.width.max(img.height) <= edge {
+        return Ok(img);
+    }
+    let (nw, nh) = target_dims(img.width, img.height, edge);
     let src = fr::images::Image::from_vec_u8(img.width, img.height, img.rgb, fr::PixelType::U8x3)
         .map_err(|e| anyhow!("resize: {e:?}"))?;
     let mut dst = fr::images::Image::new(nw, nh, fr::PixelType::U8x3);
