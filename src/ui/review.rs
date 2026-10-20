@@ -138,13 +138,27 @@ pub fn hhmmss(ms: i64) -> String {
         .unwrap_or_default()
 }
 
+/// A set-aside reason in words a photographer uses.
+pub fn reason_words(r: &str) -> &'static str {
+    match r {
+        "blurry" => "Out of focus or shaken",
+        "overexposed" => "Blown highlights",
+        "underexposed" => "Large black areas",
+        "too_dark" => "Too dark",
+        "too_bright" => "Too bright",
+        "low_contrast" => "Flat, low contrast",
+        "unreadable" => "Couldn't open this file",
+        _ => "Your choice",
+    }
+}
+
 /// Status words used in the window.
 pub fn status_word(s: Status) -> &'static str {
     match s {
         Status::Pick => "keeper",
         Status::Maybe => "maybe",
         Status::Reject => "set aside",
-        Status::Failed => "unreadable",
+        Status::Failed => "couldn't open",
     }
 }
 
@@ -554,7 +568,7 @@ impl Review {
     pub fn component_rows(&self, idx: usize, other: Option<usize>, other_name: &str) -> Vec<(&'static str, f32, Option<f32>, String)> {
         let e = &self.ranking.entries[idx];
         let o = other.map(|i| &self.ranking.entries[i]);
-        let names = ["Sharpness", "Exposure", "Contrast", "Low noise", "Colour"];
+        let names = ["Sharpness", "Exposure", "Contrast", "Clean (low noise)", "Colour"];
         let mut rows: Vec<_> = (0..5)
             .map(|k| {
                 let ov = o.map(|x| x.components[k]);
@@ -564,7 +578,7 @@ impl Review {
         if o.is_some() || e.group_size > 1 {
             let gv = e.group_score / 100.0;
             let og = o.map(|x| x.group_score / 100.0);
-            rows.push(("Sharp on subject", gv, og, theme::delta_label(gv, og, other_name)));
+            rows.push(("Sharp where it matters", gv, og, theme::delta_label(gv, og, other_name)));
         }
         rows
     }
@@ -670,7 +684,7 @@ pub fn frame_card(ui: &mut Ui, rv: &Review, app: &mut BestOfBurstApp, idx: usize
     let er = theme::text_at(ui, pos2(well.max.x - 8.0, ey), Align2::RIGHT_CENTER, &edge, theme::f_mono(10.0), theme::EDGE, 0.5);
     theme::edge_arrow(ui, pos2(er.min.x - 9.0, er.center().y), theme::EDGE);
     if aside && big {
-        let reason = e.reasons.first().map(|r| r.replace('_', " ")).unwrap_or_else(|| "manual".into());
+        let reason = e.reasons.first().map(|r| reason_words(r).to_string()).unwrap_or_else(|| "Your choice".into());
         theme::text_at(ui, pos2(well.min.x + 8.0, well.min.y + 12.0), Align2::LEFT_TOP, &reason.to_uppercase(), theme::f_mono_semi(10.0), theme::SAFELIGHT_SOFT, 0.6);
     }
     if o.selected {
@@ -849,22 +863,22 @@ fn filter_bar(rv: &mut Review, ui: &mut Ui, p: Pal) {
                 rv.items_dirty = true;
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let label = if rv.stacked { "STACKED" } else { "EXPANDED" };
-                if filter_cell(ui, label, false, p, "Groups stacked or expanded") {
+                let label = if rv.stacked { "BURSTS: STACKED" } else { "BURSTS: SPREAD OUT" };
+                if filter_cell(ui, label, false, p, "Show bursts stacked or spread out") {
                     rv.stacked = !rv.stacked;
                     rv.expanded.clear();
                     rv.items_dirty = true;
                 }
                 let before = rv.sort;
                 let sort_label = egui::ComboBox::from_id_salt("sort")
-                    .selected_text(theme::mono(match rv.sort { SortBy::Time => "Time", SortBy::Score => "Score", SortBy::Name => "Name" }, 10.5, p.on_surface))
-                    .width(78.0)
+                    .selected_text(theme::mono(match rv.sort { SortBy::Time => "Time taken", SortBy::Score => "Best first", SortBy::Name => "File name" }, 10.5, p.on_surface))
+                    .width(104.0)
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut rv.sort, SortBy::Time, "Time");
-                        ui.selectable_value(&mut rv.sort, SortBy::Score, "Score");
-                        ui.selectable_value(&mut rv.sort, SortBy::Name, "Name");
+                        ui.selectable_value(&mut rv.sort, SortBy::Time, "Time taken");
+                        ui.selectable_value(&mut rv.sort, SortBy::Score, "Best first");
+                        ui.selectable_value(&mut rv.sort, SortBy::Name, "File name");
                     });
-                let sl = ui.label(theme::mono("Sort", 10.5, p.muted));
+                let sl = ui.label(theme::mono("Order", 10.5, p.muted));
                 sort_label.response.labelled_by(sl.id);
                 if rv.sort != before {
                     rv.items_dirty = true;
@@ -879,7 +893,7 @@ fn filter_bar(rv: &mut Review, ui: &mut Ui, p: Pal) {
                             ui.selectable_value(&mut rv.preset, x, x.label());
                         }
                     });
-                let pl = ui.label(theme::mono("Shot type", 10.5, p.muted));
+                let pl = ui.label(theme::mono("Shoot", 10.5, p.muted));
                 pr.response.labelled_by(pl.id);
                 if rv.preset != before {
                     rv.rerank();
@@ -890,7 +904,7 @@ fn filter_bar(rv: &mut Review, ui: &mut Ui, p: Pal) {
                         .font(theme::f_mono_semi(12.0))
                         .desired_width(56.0),
                 );
-                let kl = ui.label(theme::mono("Keep", 10.5, p.muted));
+                let kl = ui.label(theme::mono("Photos to keep", 10.5, p.muted));
                 let resp = resp.labelled_by(kl.id);
                 if resp.changed() {
                     if let Some(k) = Keep::parse(&rv.keep_text) {
@@ -936,7 +950,7 @@ fn timeline(rv: &mut Review, ui: &mut Ui, p: Pal) {
         }
     }
     let max = counts.iter().copied().max().unwrap_or(1).max(1) as f32;
-    ui.label(theme::mono("The shoot", 10.5, p.muted));
+    ui.label(theme::mono("Your shoot over time · red = close calls · click to jump", 10.5, p.muted));
     let w = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(vec2(w, 56.0), Sense::click());
     resp.widget_info(|| WidgetInfo::labeled(Role::Slider, true, "Shoot timeline"));
@@ -970,7 +984,7 @@ fn timeline(rv: &mut Review, ui: &mut Ui, p: Pal) {
     } else if let Some(pos) = resp.hover_pos() {
         let b = ((pos.x - rect.min.x) / bw).floor().clamp(0.0, BINS as f32 - 1.0) as usize;
         let at = t0 + (b as f64 / (BINS as f64 - 1.0) * span) as i64;
-        resp.on_hover_text(format!("{}  ·  {} frames", hhmmss(at), counts[b]));
+        resp.on_hover_text(format!("{}  ·  {} photos", hhmmss(at), counts[b]));
     }
 }
 
@@ -978,7 +992,7 @@ fn contact_rows(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) 
     let mut nav = None;
     if rv.items.is_empty() {
         ui.add_space(40.0);
-        ui.label(theme::xp("Nothing on this part of the table.", 20.0, p.muted));
+        ui.label(theme::xp("No photos here.", 20.0, p.muted));
         return None;
     }
     let cell_w = ((ui.available_width() - GUTTER) / COLS as f32).floor();
@@ -1038,7 +1052,7 @@ fn side_panel(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) ->
             ui.set_max_width(352.0);
             let open = rv.open_close_calls();
             let msg = if open > 0 {
-                format!("I circled {}. {} {} your eyes.", theme::plural(rv.ranking.summary.picks, "keeper"), theme::plural(open, "close call"), if open == 1 { "needs" } else { "need" })
+                format!("I circled {}. {} {} your eye.", theme::plural(rv.ranking.summary.picks, "keeper"), theme::plural(open, "close call"), if open == 1 { "needs" } else { "need" })
             } else {
                 format!("I circled {}. No close calls left. Nice work.", theme::plural(rv.ranking.summary.picks, "keeper"))
             };
@@ -1070,11 +1084,11 @@ fn side_panel(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) ->
 fn detail(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) -> Option<Nav> {
     let mut nav = None;
     let Some(idx) = rv.selected else {
-        ui.label(theme::body("Select a frame on the sheet.", 14.0, p.muted));
+        ui.label(theme::body("Click a photo on the contact sheet.", 14.0, p.muted));
         return None;
     };
     let e = rv.ranking.entries[idx].clone();
-    ui.label(theme::mono("Selected frame", 11.0, p.muted));
+    ui.label(theme::mono("Selected photo", 11.0, p.muted));
     let w = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(vec2(w, w * 0.68), Sense::click());
     resp.widget_info(|| WidgetInfo::labeled(Role::Image, true, format!("Preview of {}", file_name(&e.path))));
@@ -1098,15 +1112,15 @@ fn detail(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) -> Opt
     }
     ui.add_space(6.0);
     ui.label(theme::xp(file_name(&e.path), 18.0, p.on_surface));
-    let mut meta = format!("{}  ·  score {:.1}", status_word(e.effective()), e.score);
+    let mut meta = format!("{}  ·  quality {:.0}/100", status_word(e.effective()), e.score);
     if let Some(r) = e.rank {
-        meta.push_str(&format!("  ·  rank {r}"));
+        meta.push_str(&format!("  ·  #{r} best"));
     }
     if e.group_size > 1 {
-        meta.push_str(&format!("  ·  stack of {}", e.group_size));
+        meta.push_str(&format!("  ·  1 of {} in this burst", e.group_size));
     }
     if e.override_status.is_some() {
-        meta.push_str("  ·  your call");
+        meta.push_str("  ·  your choice");
     }
     ui.label(theme::mono(meta, 10.5, p.muted));
     ui.add_space(8.0);
@@ -1127,7 +1141,7 @@ fn detail(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) -> Opt
     ui.horizontal(|ui| {
         ui.visuals_mut().override_text_color = Some(p.on_surface);
         let tw = ((full - 16.0) / 3.0).floor();
-        if theme::button(ui, "Clear", Some("0"), Btn::MonoSmall, 40.0, Some(tw), e.override_status.is_some()).clicked() {
+        if theme::button(ui, "Reset", Some("0"), Btn::MonoSmall, 40.0, Some(tw), e.override_status.is_some()).clicked() {
             rv.set_status(idx, None);
         }
         if theme::button(ui, "Loupe", Some("Spc"), Btn::MonoSmall, 40.0, Some(tw), e.ok).clicked() && rv.open_focus(e.group, Some(idx)) {
@@ -1148,7 +1162,7 @@ fn detail(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) -> Opt
     }
     if !e.reasons.is_empty() {
         ui.add_space(6.0);
-        ui.label(theme::mono(format!("Set aside: {}", e.reasons.join(", ").replace('_', " ")), 10.5, p.mark));
+        ui.label(theme::body(format!("Set aside: {}", e.reasons.iter().map(|r| reason_words(r)).collect::<Vec<_>>().join(", ")), 13.0, p.mark));
     }
     if let Some(f) = rv.state.files.get(&e.path) {
         if let Some(err) = &f.error {
@@ -1156,20 +1170,22 @@ fn detail(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) -> Opt
         }
         ui.add_space(6.0);
         let m = &e.metrics;
+        let taken = f
+            .capture_ms
+            .and_then(chrono::DateTime::from_timestamp_millis)
+            .map(|t| t.naive_utc().format("%-d %b %Y, %H:%M:%S").to_string())
+            .unwrap_or_default();
+        let brightness = if m.mean_luma < 0.3 { "dark" } else if m.mean_luma > 0.62 { "bright" } else { "well balanced" };
         ui.label(
             egui::RichText::new(format!(
-                "{} · {} · {}\nsharpness {:.0} · luma {:.2} · contrast {:.2} · noise {:.1}\nclipped {:.1}% highlights, {:.1}% shadows",
+                "{} photo · taken {}\nBrightness {} · blown highlights {:.1}% · black areas {:.1}%",
                 f.format.to_uppercase(),
-                f.decoder.as_deref().unwrap_or("-").to_uppercase(),
-                f.capture_ms.map(crate::analyze::format_capture).unwrap_or_default(),
-                m.sharpness,
-                m.mean_luma,
-                m.contrast,
-                m.noise,
+                taken,
+                brightness,
                 m.clip_highlights * 100.0,
                 m.clip_shadows * 100.0
             ))
-            .font(theme::f_mono(10.0))
+            .font(theme::f_body(12.5))
             .color(p.muted),
         );
     }
@@ -1177,7 +1193,7 @@ fn detail(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) -> Opt
     let members = rv.members(e.group);
     if members.len() > 1 {
         ui.add_space(12.0);
-        ui.label(theme::mono(format!("Same shot · {} frames", members.len()), 10.5, p.muted));
+        ui.label(theme::mono(format!("This burst · {} photos", members.len()), 10.5, p.muted));
         let cw = ((ui.available_width() - 4.0) / 3.0).floor();
         for chunk in members.chunks(3) {
             ui.horizontal(|ui| {

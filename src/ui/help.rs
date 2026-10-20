@@ -5,27 +5,27 @@ use eframe::egui::{self, Key, Ui};
 use super::app::{self, BestOfBurstApp};
 use super::theme::{self, Btn};
 
-pub const KEEP: &str = "How many photos you want at the end. Type a number (like 300) or a percentage of the shoot (like 10%). BestOfBurst circles that many of the best ones and copies them into a \"picks\" folder. You can change it later without starting over.";
+pub const KEEP: &str = "How many photos you want to end up with. Click the box and type a number (like 300 for a wedding album) or a share of the shoot (like 10%), or use the quick buttons. BestOfBurst circles that many of the best and puts them in a \"picks\" folder. You can change it later without starting over.";
 
-pub const SHOT_TYPE: &str = "What kind of shoot this is, so the scoring knows what matters most. General is a good default. Portrait cares more about good light and clean skin tones. Sports cares most about sharpness. Landscape cares more about contrast and colour.";
+pub const SHOT_TYPE: &str = "What kind of shoot this is, so BestOfBurst knows what matters most. General suits weddings, events and everyday shoots. Portrait cares more about good light and clean skin. Sports cares most about sharp, frozen action. Landscape cares more about contrast and colour.";
 
-pub const ENGINE: &str = "Which part of your computer does the heavy work.\n\n• Auto (recommended): uses your graphics card if it works, otherwise the processor.\n• GPU: the graphics card shrinks and measures every photo. It is built for this kind of work and frees the processor to open the next photos.\n• CPU: the processor does everything. Slower, but works on every computer.\n\nOpening (decoding) each photo always happens on the processor, so a faster graphics card helps, but not endlessly.";
+pub const ENGINE: &str = "Which part of your computer does the heavy lifting.\n\n• Automatic (recommended): uses the graphics card if your computer has a suitable one, otherwise the processor.\n• Graphics: the graphics card checks every photo. It's built for picture work, so culling finishes sooner.\n• Processor: the main processor does everything. A little slower, but works on every computer.\n\nOpening each photo file is always done by the processor, so a better graphics card speeds things up, but only so far.";
 
-pub const THREADS: &str = "How many photos the processor opens at the same time. Cores are the processor's independent workers; this computer has the number shown. More threads finish sooner, but leave less room for other programs while BestOfBurst works. The default leaves one core free so your computer stays responsive. Using all cores together with the GPU is usually the fastest.";
+pub const THREADS: &str = "How many photos BestOfBurst opens at the same time. Your processor has a number of cores, like several pairs of hands. Using more at once finishes sooner but leaves less for other programs, so editing or email may feel slower meanwhile. The default leaves one core free. Using all of them with the graphics card is the fastest.";
 
-pub const LIVE: &str = "What your computer is doing right now.\n\n• Processor: how busy the whole processor is, and how much of that is BestOfBurst.\n• Workers: photos being opened at this moment, and how many are waiting for or using the graphics card.\n• Graphics card: how busy it is overall and from BestOfBurst. Cores are its small parallel workers; \"about N busy\" is an estimate from how busy it is.\n• Video memory: memory on the graphics card in use.\n• Per photo: average time to open a photo, and to measure it on the GPU or CPU.";
+pub const LIVE: &str = "What your computer is doing right now.\n\n• Processor: how busy your computer's processor is, and how much of that is BestOfBurst.\n• Photos in progress: how many photos are being worked on at this moment.\n• Graphics card: how busy it is. Its cores are hundreds of tiny workers; \"about N busy\" is an estimate.\n• Graphics memory: how much of the card's own memory is in use.\n• Time per photo: on average, how long it takes to open each photo and to check it.";
 
 /// Help screen sections: title and text.
 pub const SECTIONS: &[(&str, &str)] = &[
-    ("What BestOfBurst does", "You give it a folder of photos. It looks at every frame, stacks the ones taken of the same moment, and circles the best frame of each moment. The best ones go into a \"picks\" folder next to your photos. Your original files are never changed, moved or deleted."),
-    ("The marks", "A red circle means keeper. A wave underneath means maybe. A cross means set aside (too blurry, too dark, and so on). A \"?\" marks a close call: two frames of the same moment that are nearly equal, so your eyes should decide."),
-    ("Keep", KEEP),
-    ("Shot type", SHOT_TYPE),
-    ("Engine: GPU and CPU", ENGINE),
-    ("Threads and cores", THREADS),
-    ("The live readings", LIVE),
+    ("What BestOfBurst does", "You give it a folder from a shoot. It checks every photo for focus, exposure and noise, stacks the bursts (photos of the same moment), and circles the best one of each moment. Your keepers go into a \"picks\" folder. Your original files are never changed, moved or deleted."),
+    ("The marks", "A red circle means keeper. A wave underneath means maybe. A cross means set aside (out of focus, too dark, and so on). A \"?\" marks a close call: two photos of the same moment that are nearly as good as each other, so your eye should decide."),
+    ("Photos to keep", KEEP),
+    ("Type of shoot", SHOT_TYPE),
+    ("Speed: graphics card or processor", ENGINE),
+    ("Photos at once", THREADS),
+    ("Your computer now", LIVE),
     ("The loupe and compare", "The loupe shows one moment at a time with the subject at 100 % so you can check eyes and focus. Press Enter to keep the circled frame and go to the next close call, or P to move the circle. Compare shows two frames on top of each other: wipe with the mouse or blink between them."),
-    ("Delivering", "Deliver writes the picks folder. By default the files there are hard links: they look like normal files but take no extra space. Deleting one never deletes your original, but an editor that saves over a file in picks changes the original too. Choose \"Copy instead of hard links\" if you will edit the pixels."),
+    ("Delivering", "Deliver puts your keepers in a \"picks\" folder inside your shoot folder. Normally these are shortcuts: they look and open like the real photos but use no extra disk space, and deleting one never deletes your original. But if you edit and save a photo inside picks, the original changes too. Tick \"Make full copies\" if you plan to edit them there."),
     ("Glim", "Glim is the little lens helper. Every close call you settle earns a treat; spend them in Glim's corner. After 20 minutes of reviewing, Glim suggests a short break for your eyes."),
     ("Keyboard", "F1 help. Arrows move. P keeper, U maybe, X set aside, 0 clear. Space opens the loupe, N the next close call, C compare. Ctrl+Z undo, Ctrl+E deliver. Esc goes back."),
 ];

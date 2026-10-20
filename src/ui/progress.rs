@@ -53,9 +53,9 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
             let r = frame
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.label(theme::mono(format!("{} frames need a Windows codec", fmt(p.missing_codec)), 11.0, theme::SAFELIGHT_SOFT));
+                    ui.label(theme::mono(format!("{} photos need a free Microsoft add-on to open", fmt(p.missing_codec)), 11.0, theme::SAFELIGHT_SOFT));
                     ui.label(theme::body(
-                        "From the Microsoft Store: HEIF Image Extensions + HEVC Video Extensions (HEIC), AV1 Video Extension (AVIF), Raw Image Extension (RAW). Then develop again with failed frames retried.",
+                        "Get them free from the Microsoft Store: HEIF Image Extensions and HEVC Video Extensions (iPhone HEIC photos), AV1 Video Extension (AVIF), Raw Image Extension (some RAW files). Then start again and tick \"Try again on photos that couldn't be opened\".",
                         14.0,
                         theme::TABLE,
                     ));
@@ -76,10 +76,10 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
             1
         };
         let eyebrow = match step {
-            0 => "Scanning the shoot",
-            3 => "Grouping and ranking",
-            4 => "Developed",
-            _ => "Measuring frames",
+            0 => "Finding your photos",
+            3 => "Picking the best of each moment",
+            4 => "All done",
+            _ => "Checking every photo",
         };
         ui.label(theme::mono(eyebrow, 11.0, theme::SAFELIGHT));
         ui.add_space(6.0);
@@ -87,11 +87,11 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
         // Giant counter.
         let (count, of) = if finished {
             let picks = p.summary.as_ref().map(|s| s.picks).unwrap_or(0);
-            (fmt(picks), format!("keepers circled from {} frames", fmt(p.total_files)))
+            (fmt(picks), format!("keepers circled from {} photos", fmt(p.total_files)))
         } else if p.scanning {
-            ("0".to_string(), "frames found so far".to_string())
+            ("0".to_string(), "looking through the folder".to_string())
         } else {
-            (fmt(p.done), format!("/ {} new frames · {} already measured", fmt(p.total), fmt(p.total_files.saturating_sub(p.total))))
+            (fmt(p.done), format!("of {} new photos checked · {} done before", fmt(p.total), fmt(p.total_files.saturating_sub(p.total))))
         };
         let w = ui.available_width();
         let size = theme::fit_size(ui, &count, 148.0, w * 0.9, false);
@@ -113,9 +113,9 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
         ui.add_space(4.0);
         ui.label(theme::mono(
             format!(
-                "{:.1} frames/s   ·   ETA {}   ·   {} failed",
+                "{:.1} photos a second   ·   {}   ·   {} couldn't be opened",
                 p.per_sec,
-                if finished { "done".into() } else { p.eta_s.map(clock).unwrap_or_else(|| "-".into()) },
+                if finished { "finished".into() } else { p.eta_s.map(|s| format!("about {} left", clock(s))).unwrap_or_else(|| "working out the time left".into()) },
                 fmt(p.failed)
             ),
             10.5,
@@ -125,7 +125,7 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
 
         // Step list: scan, measure, group, rank.
         ui.horizontal(|ui| {
-            for (i, name) in ["Scan", "Measure", "Group", "Rank"].iter().enumerate() {
+            for (i, name) in ["Find photos", "Check quality", "Stack bursts", "Pick the best"].iter().enumerate() {
                 let (color, tag) = if i < step {
                     (theme::ASH, "done")
                 } else if i == step {
@@ -135,7 +135,7 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
                 };
                 ui.vertical(|ui| {
                     ui.label(theme::mono(format!("0{} · {tag}", i + 1), 10.5, color));
-                    ui.label(theme::xp(name, 20.0, color));
+                    ui.label(theme::xp(name, 16.0, color));
                 });
                 ui.add_space(36.0);
             }
@@ -143,7 +143,7 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
         ui.add_space(24.0);
 
         // Live film strip of the latest frames.
-        ui.label(theme::mono("Latest frames", 10.5, theme::ASH));
+        ui.label(theme::mono("Just checked", 10.5, theme::ASH));
         let thumbs: Vec<_> = p.recent_thumbs.iter().cloned().collect();
         let (strip, _) = ui.allocate_exact_size(vec2(w, 120.0), Sense::hover());
         theme::film_well(ui, strip);
@@ -221,25 +221,25 @@ fn live_panel(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
             ui.set_max_width(ui.available_width() - 14.0);
             let gpu_on = st.engine == 2;
             ui.horizontal(|ui| {
-                ui.label(theme::xp("Engine live", 18.0, theme::TABLE));
+                ui.label(theme::xp("Your computer now", 18.0, theme::TABLE));
                 ui.add_space(6.0);
-                let _ = super::help::toggle(ui, "live", "Engine live");
+                let _ = super::help::toggle(ui, "live", "Your computer now");
             });
             if ui.ctx().data_mut(|d| *d.get_temp_mut_or_insert_with(help_id(), || false)) {
                 super::help::card(ui, super::help::LIVE, true);
             }
-            ui.label(theme::mono(if gpu_on { "GPU + CPU" } else { "CPU only" }, 10.5, theme::SAFELIGHT));
+            ui.label(theme::mono(if gpu_on { "Graphics card + processor" } else { "Processor only" }, 10.5, theme::SAFELIGHT));
             ui.add_space(10.0);
 
             // Processor.
             ui.label(theme::mono("Processor", 11.0, theme::ASH));
             theme::ruler(ui, p, "Whole computer", snap.cpu_total / 100.0, None, &format!("{:.0}%", snap.cpu_total));
             theme::ruler(ui, p, "BestOfBurst", snap.cpu_app / 100.0, None, &format!("{:.0}%", snap.cpu_app));
-            stat(ui, "Cores", &format!("{} cores · {} logical", snap.physical, snap.logical));
-            stat(ui, "Workers", &format!("{} busy of {}", st.busy, st.threads.max(app.threads)));
-            stat(ui, "  opening photos", &format!("{}", st.decoding));
+            stat(ui, "Cores", &format!("{}", snap.physical));
+            stat(ui, "Photos in progress", &format!("{} of {}", st.busy, st.threads.max(app.threads)));
+            stat(ui, "  being opened", &format!("{}", st.decoding));
             if gpu_on {
-                stat(ui, "  on the graphics card", &format!("{}", st.on_gpu));
+                stat(ui, "  being checked on the graphics card", &format!("{}", st.on_gpu));
             }
             ui.add_space(12.0);
 
@@ -262,39 +262,28 @@ fn live_panel(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
             });
             if let Some(c) = cores {
                 let busy = snap.gpu_app.or(snap.gpu_total).unwrap_or(0.0) / 100.0 * c as f32;
-                stat(ui, "Cores", &format!("{} total · about {} busy", theme::thousands(c as usize), theme::thousands(busy.round() as usize)));
+                stat(ui, "Cores", &format!("{} · about {} busy", theme::thousands(c as usize), theme::thousands(busy.round() as usize)));
             } else {
-                stat(ui, "Cores", "not reported by this driver");
+                stat(ui, "Cores", "not shown by this card");
             }
             if let (Some(u), Some(t)) = (snap.gpu_mem_used_mb, snap.gpu_mem_total_mb) {
-                theme::ruler(ui, p, "Video memory", u as f32 / t.max(1) as f32, None, &format!("{} / {} MB", theme::thousands(u as usize), theme::thousands(t as usize)));
+                theme::ruler(ui, p, "Graphics memory", u as f32 / t.max(1) as f32, None, &format!("{} / {} MB", theme::thousands(u as usize), theme::thousands(t as usize)));
             }
-            if let Some(Ok(i)) = crate::gpu::status() {
-                ui.label(theme::body("Parallel work", 13.0, theme::ASH));
-                ui.label(
-                    egui::RichText::new(format!(
-                        "{} threads per group, 64 groups per photo (card allows {} per group)",
-                        crate::gpu::THREADS_PER_GROUP,
-                        i.max_invocations_per_group
-                    ))
-                    .font(theme::f_mono(10.0))
-                    .color(theme::TABLE),
-                );
-            }
+
             ui.add_space(12.0);
 
             // Per photo.
-            ui.label(theme::mono("Per photo", 11.0, theme::ASH));
-            stat(ui, "Opening (CPU)", &format!("{:.0} ms", st.decode_ms_avg));
+            ui.label(theme::mono("Time per photo", 11.0, theme::ASH));
+            stat(ui, "Opening it", &format!("{:.2} s", st.decode_ms_avg / 1000.0));
             if st.gpu_photos > 0 {
-                stat(ui, "Measuring (GPU)", &format!("{:.0} ms", st.gpu_ms_avg));
+                stat(ui, "Checking it (graphics card)", &format!("{:.2} s", st.gpu_ms_avg / 1000.0));
             }
             if st.cpu_photos > 0 {
-                stat(ui, "Measuring (CPU)", &format!("{:.0} ms", st.cpu_ms_avg));
+                stat(ui, "Checking it (processor)", &format!("{:.2} s", st.cpu_ms_avg / 1000.0));
             }
-            stat(ui, "Done on", &format!("GPU {} · CPU {}", theme::thousands(st.gpu_photos as usize), theme::thousands(st.cpu_photos as usize)));
+            stat(ui, "Checked by", &format!("graphics {} · processor {}", theme::thousands(st.gpu_photos as usize), theme::thousands(st.cpu_photos as usize)));
             if st.gpu_fallbacks > 0 {
-                stat(ui, "GPU fell back", &format!("{} photos (done on the CPU instead)", st.gpu_fallbacks));
+                stat(ui, "Handed to the processor", &format!("{}", st.gpu_fallbacks));
             }
         });
     });

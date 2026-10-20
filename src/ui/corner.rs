@@ -108,7 +108,7 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
     egui::Panel::right("corner_side").exact_size(560.0).resizable(false).frame(side).show(ui, |ui| {
         ui.label(theme::mono("Mini-game", 11.0, theme::GRAPHITE));
         ui.label(theme::xp("Sharp Eye", 26.0, theme::INK));
-        ui.label(theme::body("Circle the one frame that's sharp on the subject. Frames come from your own shoot.", 14.0, theme::INK_2));
+        ui.label(theme::body("Click the sharpest photo. They come from your own shoot.", 14.0, theme::INK_2));
         ui.add_space(12.0);
         if app.corner.round.is_none() && app.review.is_some() {
             app.corner.round = new_round(app);
@@ -156,7 +156,7 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
         let verdict = match picked {
             None => "Pick one.".to_string(),
             Some(f) if f == answer => "Sharp eye! That's the one.".into(),
-            Some(_) => "Close. The circled one is sharper on the subject.".into(),
+            Some(_) => "Close! The circled one is sharper.".into(),
         };
         ui.label(theme::xp(verdict, 16.0, theme::INK));
         ui.label(theme::mono(format!("Score {} / {} · best {}", app.corner.score, app.corner.rounds, app.settings.sharp_eye_best), 10.5, theme::GRAPHITE));
@@ -171,7 +171,7 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
     // Habitat.
     let main = egui::Frame::new().fill(theme::TABLE).inner_margin(48.0);
     egui::CentralPanel::default().frame(main).show(ui, |ui| {
-        ui.label(theme::mono("Habitat", 11.0, theme::GRAPHITE));
+        ui.label(theme::mono("Glim's desk", 11.0, theme::GRAPHITE));
         let w = ui.available_width();
         let size = 290.0f32.min(w * 0.6);
         let (rect, resp) = ui.allocate_exact_size(vec2(w, size + 24.0), Sense::click());

@@ -95,10 +95,10 @@ fn window_flow() {
     settle(&mut h, |a| a.screen == Screen::Home);
 
     // Develop again: Processing with the live engine panel, then the contact sheet.
-    h.get_by_label("Help: Engine").click();
+    h.get_by_label("Help: Speed").click();
     settle(&mut h, |_| true);
     snapshot(&mut h, "1b_home_engine_help");
-    h.get_by_label("Develop again").click();
+    h.get_by_label("Check for new photos").click();
     settle(&mut h, |a| a.prog.finished);
     assert!(h.state().prog.finished);
     std::thread::sleep(Duration::from_millis(900));

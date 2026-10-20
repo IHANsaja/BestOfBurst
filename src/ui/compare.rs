@@ -73,7 +73,7 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         "compare_header",
         |ui| {
             home = app::logo_cell(ui);
-            app::text_cell(ui, "Compare · A keeper vs B", true);
+            app::text_cell(ui, "Compare · A (circled) and B", true);
         },
         |ui| {
             ui.add_space(16.0);
@@ -98,15 +98,15 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         ui.horizontal(|ui| {
             ui.visuals_mut().override_text_color = Some(theme::TABLE);
             let wipe = c.mode == CmpMode::Wipe;
-            if theme::button(ui, if wipe { "Wipe ·" } else { "Wipe" }, Some("W"), if wipe { Btn::Inverse } else { Btn::OnDark }, 44.0, None, true).clicked() {
+            if theme::button(ui, if wipe { "Slider ·" } else { "Slider" }, Some("W"), if wipe { Btn::Inverse } else { Btn::OnDark }, 44.0, None, true).clicked() {
                 c.mode = CmpMode::Wipe;
             }
-            if theme::button(ui, if !wipe { "Blink ·" } else { "Blink" }, Some("B"), if !wipe { Btn::Inverse } else { Btn::OnDark }, 44.0, None, true).clicked() {
+            if theme::button(ui, if !wipe { "Flip ·" } else { "Flip" }, Some("B"), if !wipe { Btn::Inverse } else { Btn::OnDark }, 44.0, None, true).clicked() {
                 c.mode = CmpMode::Blink;
                 c.auto_blink = !app.reduced_motion;
             }
             ui.add_space(12.0);
-            if theme::button(ui, if c.crop { "100% crop ·" } else { "100% crop" }, Some("Z"), Btn::OnDark, 44.0, None, true).clicked() {
+            if theme::button(ui, if c.crop { "Zoom to 100% ·" } else { "Zoom to 100%" }, Some("Z"), Btn::OnDark, 44.0, None, true).clicked() {
                 c.crop = !c.crop;
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -170,7 +170,7 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
                 ui,
                 pos,
                 align,
-                &format!("{letter} · {} · group {:.1}{circ}", file_name(&e.path), e.group_score).to_uppercase(),
+                &format!("{letter} · {} · best in burst {:.0}{circ}", file_name(&e.path), e.group_score).to_uppercase(),
                 theme::f_mono_semi(10.5),
                 theme::EDGE,
                 0.6,
@@ -193,14 +193,14 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
             }
         }
         if matches!(la, Loaded::Loading) || matches!(lb, Loaded::Loading) {
-            app::center_text(ui, area, "DEVELOPING...", p);
+            app::center_text(ui, area, "LOADING...", p);
         }
         ui.allocate_space(vec2(0.0, 4.0));
         theme::text_at(
             ui,
             pos2(area.min.x, area.max.y + 6.0),
             Align2::LEFT_TOP,
-            "1 KEEP A · 2 KEEP B · W WIPE · B BLINK · SPACE FLIP · ARROWS OTHER FRAME · WHEEL ZOOM, DRAG PAN · ESC BACK",
+            "1 KEEP A · 2 KEEP B · W SLIDER · B FLIP · SPACE SWAP · ARROWS ANOTHER PHOTO · SCROLL TO ZOOM, DRAG TO MOVE · ESC BACK",
             theme::f_mono(10.0),
             theme::ASH,
             0.6,

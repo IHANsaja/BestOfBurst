@@ -82,18 +82,18 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         let r = ui.max_rect();
         ui.painter().line_segment([pos2(r.min.x - 28.0, r.min.y - 28.0), pos2(r.min.x - 28.0, r.max.y + 28.0)], Stroke::new(1.5, theme::INK));
         ui.label(theme::mono("Delivery", 11.0, theme::GRAPHITE));
-        ui.label(theme::xp("What goes in the folder", 22.0, theme::INK));
+        ui.label(theme::xp("What you get", 22.0, theme::INK));
         ui.add_space(12.0);
         let picks_dir = rv.out.join("picks").display().to_string();
         let mut always = true;
-        theme::checklist_row(ui, &mut always, true, "Picks folder", "Keepers, named 0001_, 0002_... so Explorer sorts best-first.", Some(&picks_dir));
+        theme::checklist_row(ui, &mut always, true, "Picks folder", "Your keepers, numbered best first (0001, 0002...).", Some(&picks_dir));
         let o = &mut rv.write_opts;
-        theme::checklist_row(ui, &mut o.maybe, false, "Maybe folder", "Everything not circled and not set aside, original names.", None);
-        theme::checklist_row(ui, &mut o.rejects, false, "Set-aside folder", "One subfolder per reason: blurry, too dark, ...", None);
-        theme::checklist_row(ui, &mut o.copy, false, "Copy instead of hard links", "Hard links take no space but share the file: an editor that saves in place changes the original. Copy if you'll edit pixels.", None);
-        theme::checklist_row(ui, &mut o.keep_names, false, "Keep original names", "Skip the rank prefix.", None);
+        theme::checklist_row(ui, &mut o.maybe, false, "Maybe folder", "Good photos that didn't make the cut, in case you want a second look.", None);
+        theme::checklist_row(ui, &mut o.rejects, false, "Set-aside folder", "Out-of-focus, too dark or too bright photos, sorted by reason.", None);
+        theme::checklist_row(ui, &mut o.copy, false, "Make full copies", "Normally the folders hold shortcuts that look and open like the real photos but take no extra disk space. Turn this on if you'll edit the photos in those folders, so your originals stay untouched.", None);
+        theme::checklist_row(ui, &mut o.keep_names, false, "Keep original file names", "Don't number the picks.", None);
         let mut report = true;
-        theme::checklist_row(ui, &mut report, true, "Report", "report.csv with every score and decision.", None);
+        theme::checklist_row(ui, &mut report, true, "Spreadsheet of results", "Every photo with its quality and decision (report.csv, opens in Excel).", None);
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
             let w = ui.available_width();
             if let Some(d) = &app.last_delivery {
@@ -104,7 +104,7 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
                 });
             }
             app::message_line(app, ui, p);
-            let label = if rv.writing { "Delivering...".to_string() } else { format!("Deliver {}", theme::thousands(s.picks)) };
+            let label = if rv.writing { "Saving...".to_string() } else { format!("Deliver {}", theme::thousands(s.picks)) };
             if theme::button(ui, &label, Some("Ctrl E"), Btn::Primary, 68.0, Some(w), !rv.writing).clicked() {
                 deliver = true;
             }
@@ -124,18 +124,18 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         ui.painter().galley(text_pos, g, theme::INK);
         let t = if app.reduced_motion { 1.0 } else { marks::ease_out((since as f32 * 1000.0) / marks::DRAW_MS) };
         marks::hero(ui, Rect::from_min_size(text_pos - vec2(size * 0.2, size * 0.02), vec2(gs.x + size * 0.4, gs.y * 0.95)), theme::RED, (size / 40.0).clamp(3.0, 6.0), t);
-        ui.label(theme::xp(format!("keepers, circled from {} frames", theme::thousands(total)), 26.0, theme::INK));
+        ui.label(theme::xp(format!("keepers, circled from {} photos", theme::thousands(total)), 26.0, theme::INK));
         ui.add_space(28.0);
 
         // 3-column stat grid.
         let reasons = {
-            let mut v: Vec<(String, usize)> = s.reject_reasons.iter().map(|(k, n)| (k.replace('_', " "), *n)).collect();
+            let mut v: Vec<(String, usize)> = s.reject_reasons.iter().map(|(k, n)| (super::review::reason_words(k).to_lowercase(), *n)).collect();
             v.sort_by(|a, b| b.1.cmp(&a.1));
             v.iter().take(3).map(|(k, n)| format!("{k} {n}")).collect::<Vec<_>>().join(" · ")
         };
         let closes = rv.close_call_groups().len();
         let stats = [
-            ("Same-shot groups", theme::thousands(s.groups), format!("{} frames measured", theme::thousands(s.analyzed))),
+            ("Moments", theme::thousands(s.groups), format!("{} photos checked", theme::thousands(s.analyzed))),
             ("Close calls settled", format!("{} / {}", rv.settled.len(), closes), format!("{} for Glim", theme::plural(app.settings.treats as usize, "treat"))),
             ("Set aside", theme::thousands(s.rejects + s.failed), if reasons.is_empty() { "nothing".into() } else { reasons }),
         ];

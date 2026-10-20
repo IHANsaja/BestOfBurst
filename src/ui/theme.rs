@@ -382,10 +382,16 @@ pub fn segmented(ui: &mut Ui, options: &[(&str, &str)], selected: &mut usize, co
         p.rect_stroke(r, 0.0, Stroke::new(1.0, rule_c), StrokeKind::Inside);
         let tc = if on { sel_fg } else { fg };
         let sc = if on { sel_fg } else { sub };
-        let g = galley(ui, &title.to_uppercase(), f_xp(15.0), tc, 0.4);
-        ui.painter().galley(r.min + vec2(14.0, 12.0), g, tc);
-        let g = galley(ui, &desc.to_uppercase(), f_mono(10.0), sc, 0.8);
-        ui.painter().galley(r.min + vec2(14.0, 36.0), g, sc);
+        // Titles shrink to fit narrow cells.
+        let mut size = 15.0;
+        let mut g = galley(ui, &title.to_uppercase(), f_xp(size), tc, 0.4);
+        while g.size().x > cell.x - 24.0 && size > 10.0 {
+            size -= 0.5;
+            g = galley(ui, &title.to_uppercase(), f_xp(size), tc, 0.3);
+        }
+        ui.painter().galley(r.min + vec2(12.0, 12.0 + (15.0 - size) * 0.5), g, tc);
+        let g = galley(ui, &desc.to_uppercase(), f_mono(if cols >= 3 { 9.0 } else { 10.0 }), sc, if cols >= 3 { 0.3 } else { 0.8 });
+        ui.painter().galley(r.min + vec2(12.0, 36.0), g, sc);
         focus_ring(ui, &resp);
     }
     changed

@@ -306,7 +306,7 @@ impl BestOfBurstApp {
     pub fn start(&mut self, ctx: &egui::Context) {
         let Some(folder) = self.folder.clone() else { return };
         let Some(keep) = self.keep() else {
-            self.flash("Keep must be a number, or a percentage like 10%.", true);
+            self.flash("Photos to keep needs a number (like 300) or a share (like 10%).", true);
             return;
         };
         let mut cfg = RunConfig::new(folder);
@@ -453,7 +453,7 @@ impl BestOfBurstApp {
             EngineMsg::Stopped => {
                 self.engine_rx = None;
                 self.screen = Screen::Home;
-                self.flash("Paused and saved. Develop again to resume.", false);
+                self.flash("Paused and saved. Press Start culling to carry on.", false);
                 if let Some(f) = self.folder.clone() {
                     self.choose_folder(f, ctx);
                 }
@@ -487,12 +487,12 @@ impl BestOfBurstApp {
                 }
                 match r {
                     Ok(s) => {
-                        let mut text = format!("Delivered {} files to {}", s.written, s.picks_dir.display());
+                        let mut text = format!("Done: {} photos are in {}", s.written, s.picks_dir.display());
                         if s.copied_fallback {
-                            text.push_str(" (hard links not supported here; copied)");
+                            text.push_str(" (full copies, since shortcuts aren't possible on this drive)");
                         }
                         if !s.errors.is_empty() {
-                            text.push_str(&format!(", {} could not be placed", s.errors.len()));
+                            text.push_str(&format!(", {} couldn't be added", s.errors.len()));
                         }
                         self.flash(text, !s.errors.is_empty());
                         self.last_delivery = Some(s);
@@ -755,31 +755,33 @@ pub fn glim_cell(app: &mut BestOfBurstApp, ui: &mut Ui, mood: super::glim::Mood)
 pub fn engine_status(app: &BestOfBurstApp) -> String {
     let s = app.sys();
     let gpu = match (app.settings.engine, crate::gpu::status()) {
-        (EngineChoice::Cpu, _) => "GPU off".to_string(),
+        (EngineChoice::Cpu, _) => "Graphics off".to_string(),
         (_, Some(Ok(_))) => match s.gpu_total {
-            Some(u) => format!("GPU {u:.0}%"),
-            None => "GPU on".into(),
+            Some(u) => format!("Graphics {u:.0}%"),
+            None => "Graphics on".into(),
         },
-        (_, Some(Err(_))) => "No GPU".into(),
-        (_, None) => "GPU ...".into(),
+        (_, Some(Err(_))) => "No graphics card".into(),
+        (_, None) => "Graphics ...".into(),
     };
-    format!("{gpu} · CPU {:.0}% · {} threads", s.cpu_total, app.threads)
+    format!("{gpu} · Processor {:.0}%", s.cpu_total)
 }
 
 /// Short GPU description for Home and the live panel.
 pub fn gpu_line(s: &Snapshot) -> (String, String) {
     match crate::gpu::status() {
         None => ("Checking the graphics card...".into(), String::new()),
-        Some(Err(why)) => ("Not available".into(), why),
+        Some(Err(_)) => ("Not available on this PC".into(), "The processor will do all the work".into()),
         Some(Ok(info)) => {
             let cores = s.gpu_cores.or_else(|| sysmon::known_cores(&info.name));
-            let mut detail = format!("{} · {}", info.backend, info.device_type);
+            let mut parts = Vec::new();
             if let Some(c) = cores {
-                detail.push_str(&format!(" · {} cores", theme::thousands(c as usize)));
+                parts.push(format!("{} cores", theme::thousands(c as usize)));
             }
             if let Some(t) = s.gpu_mem_total_mb {
-                detail.push_str(&format!(" · {} MB memory", theme::thousands(t as usize)));
+                parts.push(if t >= 1000 { format!("{:.0} GB memory", t as f32 / 1024.0) } else { format!("{t} MB memory") });
             }
+            parts.push("ready".into());
+            let detail = parts.join(" · ");
             (info.name, detail)
         }
     }

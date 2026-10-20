@@ -126,8 +126,8 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
     // Header: group counter.
     let closes = rv.close_call_groups();
     let counter = match closes.iter().position(|g| *g == group) {
-        Some(k) => format!("Close call {} / {}", k + 1, closes.len()),
-        None => format!("Group · {} frames", members.len()),
+        Some(k) => format!("Close call {} of {}", k + 1, closes.len()),
+        None => format!("Burst · {} photos", members.len()),
     };
     let mut home = false;
     let mut back = false;
@@ -196,7 +196,7 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
             theme::SAFELIGHT,
         ));
         ui.label(theme::xp(file_name(&e.path), 18.0, p.on_surface));
-        ui.label(theme::mono(format!("group {:.1}  ·  score {:.1}", e.group_score, e.score), 10.5, p.muted));
+        ui.label(theme::mono(format!("best in burst {:.0}  ·  quality {:.0}", e.group_score, e.score), 10.5, p.muted));
         ui.add_space(10.0);
         let (base, cmp_to, name) = if view_idx == keeper { (keeper, other, other_letter.to_string()) } else { (keeper, Some(view_idx), view_letter.to_string()) };
         ui.label(theme::mono(format!("Keeper {keeper_letter} vs {name}"), 10.5, p.muted));
@@ -312,7 +312,7 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         theme::text_at(ui, tag.left_center() + vec2(6.0, 0.0), Align2::LEFT_CENTER, "LOUPE · 100%", theme::f_mono_semi(10.0), theme::EDGE, 0.8);
         let tag = Rect::from_min_size(lens.left_bottom() + vec2(2.0, -22.0), vec2(64.0, 20.0));
         ui.painter().rect_filled(tag, 0.0, theme::INK);
-        theme::text_at(ui, tag.left_center() + vec2(6.0, 0.0), Align2::LEFT_CENTER, "Z SIZE", theme::f_mono(10.0), theme::ASH, 0.8);
+        theme::text_at(ui, tag.left_center() + vec2(6.0, 0.0), Align2::LEFT_CENTER, "Z BIGGER", theme::f_mono(10.0), theme::ASH, 0.8);
     });
     nav
 }
