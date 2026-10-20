@@ -26,23 +26,48 @@ without admin rights (or for all users) and adds a Start Menu shortcut and an un
 
 ## Use
 
-Double-click `bestofburst.exe` (or run `bestofburst ui [FOLDER]`) to open the window: choose or
-drop a folder, set **Keep** (a number, or a percentage like `10%`) and **Preset**, then press
-**Start**. When analysis finishes, Review opens.
+Double-click `bestofburst.exe` (or run `bestofburst ui [FOLDER]`) to open the window. The window
+follows the **Grease Pencil** design system in [DESIGN.md](DESIGN.md): a light table (or a night
+table) where every decision is a hand-drawn mark. A **circle** means keeper, a **wave** means
+maybe, a **cross** means set aside, and **?** marks a close call.
 
-| Key | Action |
-| --- | --- |
-| Arrows | Move selection |
-| P / U / X | Pick / Maybe / Reject (P on a group member makes it the group's pick) |
-| 0 | Clear override |
-| Space | Full-window preview (Esc closes) |
-| G | Expand or collapse the selected group |
-| 1 / 2 / 3 / 4 | Picks / Maybe / Rejects / All (in Compare: make that frame the pick) |
-| C | Compare the selected group's top frames |
-| N | Next close-call group (opens Compare) |
-| Enter | In Compare: keep the current pick, go to the next close call |
-| Z | In Preview or Compare: 100% crop of the subject |
-| Ctrl+Z / Ctrl+Y | Undo / redo (50 steps) |
+1. **Home**: drop a shoot folder (or click the drop zone), set **Keep** (a number, or a
+   percentage like `10%`) and the **shot type**, then press **Develop**.
+2. **Processing**: frame counter, steps, live film strip. **Pause & save** stops and resumes
+   later; **Open contact sheet** continues when it's done.
+3. **Contact sheet**: a timeline of the shoot (red bars hold close calls) and time rows of six
+   marked frames. The side panel shows how many close calls need your eyes.
+4. **Loupe** (focus): one same-shot group on the night table with the subject at 100 %.
+   Keep the circle or move it, then go to the next close call.
+5. **Compare**: wipe or blink between the keeper (A) and the runner-up (B).
+6. **Done**: the keeper count circled, delivery options, and **Deliver**.
+7. **Glim's corner**: Glim, the pencil mascot. Every close call you settle earns a treat;
+   spend them here, or play **Sharp Eye** with frames from your own shoot.
+
+After 20 minutes of review a dismissable **safelight break** suggests resting your eyes.
+The day/night table choice and Glim's state are saved in `%APPDATA%\bestofburst\settings.json`.
+
+| Where | Key | Action |
+| --- | --- | --- |
+| Contact sheet | Arrows | Move selection |
+| | P / U / X / 0 | Keeper / maybe / set aside / clear your call |
+| | Space | Open the loupe on the selected group |
+| | N | Loupe on the next close call |
+| | C | Compare the selected group |
+| | G | Expand or collapse the selected stack |
+| | 1 / 2 / 3 / 4 | Keepers / Maybe / Set aside / All |
+| | Ctrl+E | Go to delivery |
+| Loupe | Left / Right, 1-4 | Look at another frame of the group |
+| | P | Move the circle to the frame on screen (or to the runner-up) |
+| | Enter | Keep & next close call |
+| | N / C / X | Next close call / compare / set aside |
+| | Z | Bigger loupe |
+| Compare | 1 / 2 | Keep A / keep B |
+| | W / B / Space | Wipe / blink / flip by hand |
+| | Left / Right | Compare A with another frame |
+| | Z | 100 % crop |
+| Everywhere | Ctrl+Z / Ctrl+Y | Undo / redo (50 steps) |
+| | Esc | Back |
 
 Command line:
 
@@ -108,3 +133,8 @@ save PNG renders of each screen.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+The window bundles static instances of **Archivo** and **Martian Mono**, both under the SIL Open
+Font License 1.1 (`assets/fonts/OFL-*.txt`). They are baked from the variable fonts in
+[google/fonts](https://github.com/google/fonts) with fontTools (Archivo at 125 % width for
+display text, with tabular figures; Martian Mono at 87.5 % width).

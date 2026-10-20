@@ -1,12 +1,13 @@
-//! The window, driven offscreen with egui_kittest: Home -> Open results -> Review, keyboard
-//! overrides, undo, Compare and full preview. Set BOB_UI_SNAPSHOTS=<dir> to save renders.
+//! The window, driven offscreen with egui_kittest through every Grease Pencil screen: Home,
+//! contact sheet, overrides and undo, Focus (loupe), Compare, Done with delivery, Glim's corner,
+//! night table and the safelight break. Set BOB_UI_SNAPSHOTS=<dir> to save renders.
 
 mod common;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use bestofburst::engine::{self, RunConfig};
 use bestofburst::rank::{Keep, Status};
@@ -40,9 +41,9 @@ fn settle(h: &mut Harness<'_, BestOfBurstApp>, until: impl Fn(&BestOfBurstApp) -
         }
         std::thread::sleep(Duration::from_millis(25));
     }
-    // Let background thumbnail/preview decodes land.
-    for _ in 0..12 {
-        std::thread::sleep(Duration::from_millis(40));
+    // Let background thumbnail/preview decodes and mark draw-ons land.
+    for _ in 0..14 {
+        std::thread::sleep(Duration::from_millis(45));
         h.step();
     }
 }
@@ -55,10 +56,14 @@ fn snapshot(h: &mut Harness<'_, BestOfBurstApp>, name: &str) {
     }
 }
 
+fn screen(h: &Harness<'_, BestOfBurstApp>) -> Screen {
+    h.state().screen
+}
+
 #[test]
 fn window_flow() {
     let dir = scratch("ui");
-    // Keep the recent-folders list out of the real %APPDATA%.
+    // Keep recent folders and settings out of the real %APPDATA%.
     let appdata = scratch("ui-appdata");
     std::env::set_var("APPDATA", &appdata);
     shoot(&dir);
@@ -72,32 +77,27 @@ fn window_flow() {
 
     let folder = dir.clone();
     let mut h = Harness::builder()
-        .with_size(egui::vec2(1360.0, 860.0))
+        .with_size(egui::vec2(1440.0, 900.0))
         .wgpu()
         .build_eframe(move |cc| BestOfBurstApp::new(cc, Some(folder)));
 
-    // Home: counts arrive from a background scan; nothing new -> "Open results".
+    // Home: counts arrive from a background scan; nothing new -> open the contact sheet.
     settle(&mut h, |a| a.folder_info.is_some());
     snapshot(&mut h, "1_home");
     let info = h.state().folder_info.clone().unwrap();
     assert_eq!((info.total, info.analyzed, info.new), (15, 15, 0));
-    h.get_by_label("Open results").click();
-    settle(&mut h, |a| matches!(a.screen, Screen::Review));
-    assert!(matches!(h.state().screen, Screen::Review));
-    snapshot(&mut h, "2_review");
+    h.get_by_label("Open contact sheet").click();
+    settle(&mut h, |a| a.screen == Screen::Review);
+    assert_eq!(screen(&h), Screen::Review);
+    snapshot(&mut h, "2_sheet");
 
-    // Tabs carry counts; P on a Maybe makes it the pick and demotes the group's old pick.
-    let _ = h.get_by_label_contains("Picks 3");
+    // Key 2 shows Maybe; P on a maybe moves the circle and demotes the group's old keeper.
     h.key_press(Key::Num2);
     settle(&mut h, |_| true);
     let rv = h.state().review.as_ref().unwrap();
     let sel = rv.selected.expect("a maybe is selected");
     let group = rv.ranking.entries[sel].group;
-    let old_pick = rv
-        .ranking
-        .entries
-        .iter()
-        .position(|e| e.group == group && e.effective() == Status::Pick);
+    let old_pick = rv.ranking.entries.iter().position(|e| e.group == group && e.effective() == Status::Pick);
     h.key_press(Key::P);
     settle(&mut h, |_| true);
     let rv = h.state().review.as_ref().unwrap();
@@ -106,30 +106,49 @@ fn window_flow() {
         assert_eq!(rv.ranking.entries[op].effective(), Status::Maybe);
     }
     snapshot(&mut h, "3_after_pick");
-
-    // Undo restores the ranked statuses.
     h.key_press_modifiers(egui::Modifiers::COMMAND, Key::Z);
     settle(&mut h, |_| true);
     assert!(h.state().review.as_ref().unwrap().state.overrides.is_empty());
 
-    // Compare on the selected group, then the full-window preview.
+    // Night table.
+    h.get_by_label("Night table").click();
     h.key_press(Key::Num4);
+    settle(&mut h, |a| a.settings.night);
+    assert!(h.state().settings.night);
+    snapshot(&mut h, "4_sheet_night");
+
+    // N opens the loupe on a close call; Enter keeps and settles it (one treat).
+    h.key_press(Key::N);
+    settle(&mut h, |a| a.screen == Screen::Focus);
+    assert_eq!(screen(&h), Screen::Focus);
+    std::thread::sleep(Duration::from_millis(500));
+    settle(&mut h, |_| true);
+    snapshot(&mut h, "5_focus");
+    h.key_press(Key::ArrowRight);
+    settle(&mut h, |_| true);
+    snapshot(&mut h, "5b_focus_b");
     h.key_press(Key::C);
-    settle(&mut h, |a| a.review.as_ref().map(|r| r.compare.is_some()).unwrap_or(false));
-    assert!(h.state().review.as_ref().unwrap().compare.is_some());
-    snapshot(&mut h, "4_compare");
-    h.key_press(Key::Z);
+    settle(&mut h, |a| a.screen == Screen::Compare);
+    assert_eq!(screen(&h), Screen::Compare);
+    std::thread::sleep(Duration::from_millis(400));
     settle(&mut h, |_| true);
-    std::thread::sleep(Duration::from_millis(600));
-    settle(&mut h, |_| true);
-    snapshot(&mut h, "5_compare_crop");
+    snapshot(&mut h, "6_compare");
+    h.key_press(Key::Num1);
+    settle(&mut h, |a| a.screen == Screen::Focus);
+    assert_eq!(screen(&h), Screen::Focus);
+    let treats_before = h.state().settings.treats;
+    assert!(treats_before >= 1, "settling in Compare earns a treat");
     h.key_press(Key::Escape);
-    h.key_press(Key::Space);
-    settle(&mut h, |a| a.review.as_ref().map(|r| r.fullscreen).unwrap_or(false));
-    snapshot(&mut h, "6_preview");
-    h.key_press(Key::Escape);
+    settle(&mut h, |a| a.screen == Screen::Review);
+    assert_eq!(screen(&h), Screen::Review);
+
+    // Safelight break after 20 minutes of review.
+    h.state_mut().review_clock = Instant::now().checked_sub(Duration::from_secs(21 * 60));
     settle(&mut h, |_| true);
-    assert!(!h.state().review.as_ref().unwrap().fullscreen);
+    snapshot(&mut h, "7_break");
+    h.get_by_label("Done").click();
+    settle(&mut h, |_| true);
+    assert!(h.state().break_due().is_none());
 
     // Changing Keep re-ranks in memory.
     {
@@ -139,5 +158,25 @@ fn window_flow() {
     }
     settle(&mut h, |_| true);
     assert_eq!(h.state().review.as_ref().unwrap().ranking.summary.picks, 5);
-    snapshot(&mut h, "7_keep5");
+
+    // Done and delivery.
+    h.key_press_modifiers(egui::Modifiers::COMMAND, Key::E);
+    settle(&mut h, |a| a.screen == Screen::Done);
+    assert_eq!(screen(&h), Screen::Done);
+    h.get_by_label("Deliver 5").click();
+    settle(&mut h, |a| a.last_delivery.is_some());
+    let d = h.state().last_delivery.clone().expect("delivered");
+    assert_eq!(d.written, 5);
+    snapshot(&mut h, "8_done");
+
+    // Glim's corner.
+    h.state_mut().open_corner();
+    settle(&mut h, |a| a.screen == Screen::Corner);
+    snapshot(&mut h, "9_corner");
+    h.get_by_label("Pet").click();
+    settle(&mut h, |_| true);
+    assert!(h.state().settings.joy > 60.0);
+    h.key_press(Key::Escape);
+    settle(&mut h, |a| a.screen == Screen::Done);
+    assert_eq!(screen(&h), Screen::Done);
 }

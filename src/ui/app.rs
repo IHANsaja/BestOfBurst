@@ -1,36 +1,39 @@
-//! App state, theme, and message plumbing between the UI thread and the engine/background threads.
+//! App state, settings, message plumbing between the UI thread and the engine/background
+//! threads, and the shared chrome bar (DESIGN.md 4.3).
 
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use eframe::egui::{self, Color32};
+use eframe::egui::{self, pos2, vec2, Align2, Rect, Role, Sense, Ui, WidgetInfo};
+use serde::{Deserialize, Serialize};
 
 use super::review::Review;
 use super::textures::Textures;
-use super::{home, progress, review};
+use super::theme::{self, Pal};
+use super::{compare, corner, done, focus, home, marks, progress, review};
 use crate::engine::{self, Event, RunConfig};
 use crate::output::OutputSummary;
 use crate::rank::{Keep, Preset, RankSummary};
 use crate::scan;
 use crate::state::State;
 
-pub const PANEL: Color32 = Color32::from_rgb(0x1e, 0x1e, 0x1e);
-pub const TEXT: Color32 = Color32::from_rgb(0xe6, 0xe6, 0xe6);
-pub const DIM: Color32 = Color32::from_rgb(0x9a, 0x9a, 0x9a);
-pub const ACCENT: Color32 = Color32::from_rgb(0x4c, 0x8d, 0xff);
-pub const PICK: Color32 = Color32::from_rgb(0x3f, 0xb9, 0x50);
-pub const MAYBE: Color32 = Color32::from_rgb(0xd2, 0x99, 0x22);
-pub const REJECT: Color32 = Color32::from_rgb(0xf8, 0x51, 0x49);
-pub const CARD: Color32 = Color32::from_rgb(0x26, 0x26, 0x26);
-pub const DEEP: Color32 = Color32::from_rgb(0x15, 0x15, 0x15);
+/// A safelight break is suggested after this much continuous review.
+pub const BREAK_AFTER: Duration = Duration::from_secs(20 * 60);
+pub const HEADER_H: f32 = 56.0;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Screen {
     Home,
     Progress,
     Review,
+    Focus,
+    Compare,
+    Done,
+    Corner,
 }
 
 pub enum EngineMsg {
@@ -71,14 +74,54 @@ pub struct ProgressInfo {
     pub per_sec: f32,
     pub eta_s: Option<u32>,
     pub last: Option<PathBuf>,
-    pub last_thumb: Option<PathBuf>,
+    pub recent_thumbs: VecDeque<PathBuf>,
     pub failures: Vec<(PathBuf, String)>,
     pub failed: usize,
     pub missing_codec: usize,
     pub warnings: Vec<String>,
     pub ranking: bool,
+    pub finished: bool,
+    pub summary: Option<RankSummary>,
     pub stopping: bool,
     pub started: Option<Instant>,
+}
+
+/// Small per-user preferences and Glim's state, in %APPDATA%\bestofburst\settings.json.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Settings {
+    pub night: bool,
+    pub treats: u32,
+    pub joy: f32,
+    pub energy: f32,
+    pub settled: u32,
+    pub sharp_eye_best: u32,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings { night: false, treats: 0, joy: 60.0, energy: 70.0, settled: 0, sharp_eye_best: 0 }
+    }
+}
+
+fn app_dir() -> Option<PathBuf> {
+    std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("bestofburst"))
+}
+
+fn load_json<T: for<'de> Deserialize<'de>>(name: &str) -> Option<T> {
+    app_dir().and_then(|d| std::fs::read(d.join(name)).ok()).and_then(|d| serde_json::from_slice(&d).ok())
+}
+
+fn save_json<T: Serialize + Send + 'static>(name: &'static str, value: T) {
+    std::thread::spawn(move || {
+        let Some(dir) = app_dir() else { return };
+        let _ = std::fs::create_dir_all(&dir);
+        if let Ok(data) = serde_json::to_vec_pretty(&value) {
+            let tmp = dir.join(format!("{name}.tmp"));
+            if std::fs::write(&tmp, data).is_ok() {
+                let _ = std::fs::rename(tmp, dir.join(name));
+            }
+        }
+    });
 }
 
 pub struct BestOfBurstApp {
@@ -96,10 +139,20 @@ pub struct BestOfBurstApp {
     pub bg_tx: Sender<BgMsg>,
     bg_rx: Receiver<BgMsg>,
     pub prog: ProgressInfo,
+    pub finished_state: Option<Box<State>>,
     pub textures: Textures,
     pub review: Option<Review>,
     pub message: Option<(String, bool, Instant)>,
     pub saver: Saver,
+    pub settings: Settings,
+    saved_settings: Settings,
+    pub reduced_motion: bool,
+    started: Instant,
+    /// Start of the current continuous review stretch.
+    pub review_clock: Option<Instant>,
+    pub corner_return: Screen,
+    pub corner: corner::CornerState,
+    pub last_delivery: Option<OutputSummary>,
 }
 
 /// Writes `state.json` on its own thread, always the newest snapshot.
@@ -126,60 +179,21 @@ impl Saver {
     }
 }
 
-fn recent_path() -> Option<PathBuf> {
-    std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("bestofburst").join("recent.json"))
-}
-
-fn load_recent() -> Vec<PathBuf> {
-    recent_path()
-        .and_then(|p| std::fs::read(p).ok())
-        .and_then(|d| serde_json::from_slice::<Vec<String>>(&d).ok())
-        .map(|v| v.into_iter().map(PathBuf::from).collect())
-        .unwrap_or_default()
-}
-
-fn save_recent(list: Vec<PathBuf>) {
-    std::thread::spawn(move || {
-        let Some(p) = recent_path() else { return };
-        if let Some(dir) = p.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
-        let v: Vec<String> = list.iter().map(|p| p.to_string_lossy().to_string()).collect();
-        if let Ok(data) = serde_json::to_vec_pretty(&v) {
-            let _ = std::fs::write(p, data);
-        }
-    });
-}
-
-fn apply_theme(ctx: &egui::Context) {
-    let mut v = egui::Visuals::dark();
-    v.panel_fill = PANEL;
-    v.window_fill = Color32::from_rgb(0x24, 0x24, 0x24);
-    v.extreme_bg_color = DEEP;
-    v.faint_bg_color = Color32::from_rgb(0x23, 0x23, 0x23);
-    v.override_text_color = Some(TEXT);
-    v.hyperlink_color = ACCENT;
-    v.selection.bg_fill = ACCENT.linear_multiply(0.6);
-    v.selection.stroke.color = TEXT;
-    v.widgets.hovered.bg_stroke.color = ACCENT.linear_multiply(0.8);
-    ctx.set_visuals_of(egui::Theme::Dark, v.clone());
-    ctx.set_visuals_of(egui::Theme::Light, v);
-    ctx.all_styles_mut(|s| {
-        s.spacing.item_spacing = egui::vec2(8.0, 6.0);
-        s.spacing.button_padding = egui::vec2(10.0, 4.0);
-    });
-}
-
 impl BestOfBurstApp {
     pub fn new(cc: &eframe::CreationContext<'_>, folder: Option<PathBuf>) -> Self {
-        apply_theme(&cc.egui_ctx);
+        theme::install_fonts(&cc.egui_ctx);
+        let settings: Settings = load_json("settings.json").unwrap_or_default();
+        theme::apply_visuals(&cc.egui_ctx, theme::pal(settings.night));
+        let recent: Vec<PathBuf> = load_json::<Vec<String>>("recent.json")
+            .map(|v| v.into_iter().map(PathBuf::from).collect())
+            .unwrap_or_default();
         let (bg_tx, bg_rx) = mpsc::channel();
         let mut app = BestOfBurstApp {
             screen: Screen::Home,
             folder: None,
             keep_text: "10%".into(),
             preset: Preset::General,
-            recent: load_recent(),
+            recent,
             folder_info: None,
             checking_folder: false,
             engine_rx: None,
@@ -189,10 +203,19 @@ impl BestOfBurstApp {
             bg_tx,
             bg_rx,
             prog: ProgressInfo::default(),
+            finished_state: None,
             textures: Textures::new(&cc.egui_ctx),
             review: None,
             message: None,
             saver: Saver::new(),
+            saved_settings: settings.clone(),
+            settings,
+            reduced_motion: theme::reduced_motion(),
+            started: Instant::now(),
+            review_clock: None,
+            corner_return: Screen::Home,
+            corner: corner::CornerState::default(),
+            last_delivery: None,
         };
         if let Some(f) = folder {
             let f = std::path::absolute(&f).unwrap_or(f);
@@ -201,8 +224,13 @@ impl BestOfBurstApp {
         app
     }
 
-    pub fn out_dir(&self) -> Option<PathBuf> {
-        self.folder.as_ref().map(|f| scan::default_out(f))
+    /// Seconds since start, for Glim's idle loops and mark draw-on.
+    pub fn time(&self) -> f64 {
+        self.started.elapsed().as_secs_f64()
+    }
+
+    pub fn pal(&self) -> Pal {
+        theme::pal(self.settings.night)
     }
 
     pub fn keep(&self) -> Option<Keep> {
@@ -213,12 +241,27 @@ impl BestOfBurstApp {
         self.message = Some((text.into(), error, Instant::now()));
     }
 
+    pub fn shoot_name(&self) -> String {
+        self.folder
+            .as_ref()
+            .and_then(|f| f.file_name())
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "No shoot".into())
+    }
+
+    pub fn open_corner(&mut self) {
+        if self.screen != Screen::Corner {
+            self.corner_return = self.screen;
+        }
+        self.screen = Screen::Corner;
+    }
+
     /// A folder was picked: remember it and count what is new, off the UI thread.
     pub fn choose_folder(&mut self, folder: PathBuf, ctx: &egui::Context) {
         self.recent.retain(|p| p != &folder);
         self.recent.insert(0, folder.clone());
         self.recent.truncate(10);
-        save_recent(self.recent.clone());
+        save_json("recent.json", self.recent.iter().map(|p| p.to_string_lossy().to_string()).collect::<Vec<_>>());
         if self.folder.as_ref() != Some(&folder) {
             self.textures.clear();
             self.review = None;
@@ -249,6 +292,7 @@ impl BestOfBurstApp {
         cfg.retry_failed = self.retry_failed;
         self.stop = Arc::new(AtomicBool::new(false));
         self.prog = ProgressInfo { scanning: true, started: Some(Instant::now()), ..Default::default() };
+        self.finished_state = None;
         let (tx, rx) = mpsc::channel();
         self.engine_rx = Some(rx);
         self.screen = Screen::Progress;
@@ -312,11 +356,30 @@ impl BestOfBurstApp {
         self.prog.stopping = true;
     }
 
+    /// Processing finished: open the contact sheet.
+    pub fn open_contact_sheet(&mut self) {
+        if let Some(s) = self.finished_state.take() {
+            self.enter_review(*s);
+        }
+    }
+
     fn enter_review(&mut self, state: State) {
         let Some(folder) = self.folder.clone() else { return };
         let keep = self.keep().unwrap_or_default();
         self.review = Some(Review::new(state, folder, keep, self.preset));
         self.screen = Screen::Review;
+    }
+
+    pub fn go_home(&mut self, ctx: &egui::Context) {
+        if let Some(rv) = &mut self.review {
+            rv.flush(&self.saver);
+        }
+        self.review = None;
+        self.review_clock = None;
+        self.screen = Screen::Home;
+        if let Some(f) = self.folder.clone() {
+            self.choose_folder(f, ctx);
+        }
     }
 
     fn on_engine(&mut self, msg: EngineMsg, ctx: &egui::Context) {
@@ -331,9 +394,10 @@ impl BestOfBurstApp {
                 self.prog.total = total;
                 self.prog.per_sec = per_sec;
                 self.prog.eta_s = eta_s;
-                if last_thumb.is_some() {
-                    self.prog.last = last;
-                    self.prog.last_thumb = last_thumb;
+                self.prog.last = last;
+                if let Some(t) = last_thumb {
+                    self.prog.recent_thumbs.push_front(t);
+                    self.prog.recent_thumbs.truncate(12);
                 }
                 if done == total {
                     self.prog.ranking = true;
@@ -350,15 +414,20 @@ impl BestOfBurstApp {
                 }
             }
             EngineMsg::Warning(w) => self.prog.warnings.push(w),
-            EngineMsg::Ranked(_) => self.prog.ranking = true,
+            EngineMsg::Ranked(s) => {
+                self.prog.ranking = true;
+                self.prog.summary = Some(s);
+            }
             EngineMsg::Finished(state) => {
                 self.engine_rx = None;
-                self.enter_review(*state);
+                self.prog.finished = true;
+                self.prog.ranking = false;
+                self.finished_state = Some(state);
             }
             EngineMsg::Stopped => {
                 self.engine_rx = None;
                 self.screen = Screen::Home;
-                self.flash("Stopped and saved. Press Start to resume.", false);
+                self.flash("Paused and saved. Develop again to resume.", false);
                 if let Some(f) = self.folder.clone() {
                     self.choose_folder(f, ctx);
                 }
@@ -392,7 +461,7 @@ impl BestOfBurstApp {
                 }
                 match r {
                     Ok(s) => {
-                        let mut text = format!("Wrote {} files to {}", s.written, s.picks_dir.display());
+                        let mut text = format!("Delivered {} files to {}", s.written, s.picks_dir.display());
                         if s.copied_fallback {
                             text.push_str(" (hard links not supported here; copied)");
                         }
@@ -400,11 +469,18 @@ impl BestOfBurstApp {
                             text.push_str(&format!(", {} could not be placed", s.errors.len()));
                         }
                         self.flash(text, !s.errors.is_empty());
+                        self.last_delivery = Some(s);
                     }
                     Err(e) => self.flash(e, true),
                 }
             }
         }
+    }
+
+    /// Minutes into the current review stretch, when a break is due.
+    pub fn break_due(&self) -> Option<u64> {
+        let t = self.review_clock?;
+        (t.elapsed() >= BREAK_AFTER).then(|| t.elapsed().as_secs() / 60)
     }
 }
 
@@ -437,8 +513,112 @@ fn folder_info(folder: &Path) -> FolderInfo {
     info
 }
 
+// ---- Chrome bar (4.3): a row of cells separated by 1 px rules ----
+
+/// Show the chrome bar: `left` fills cells from the left, `right` from the right.
+pub fn chrome_bar(ui: &mut Ui, id: &str, left: impl FnOnce(&mut Ui), right: impl FnOnce(&mut Ui)) {
+    let frame = egui::Frame::new().fill(theme::INK);
+    egui::Panel::top(id.to_string()).exact_size(HEADER_H).frame(frame).show(ui, |ui| {
+        theme::dark_scope(ui);
+        ui.spacing_mut().item_spacing.x = 0.0;
+        let full = ui.max_rect();
+        ui.painter().line_segment(
+            [pos2(full.min.x, full.max.y - 0.5), pos2(full.max.x, full.max.y - 0.5)],
+            egui::Stroke::new(1.0, theme::RULE_DARK),
+        );
+        ui.horizontal_centered(|ui| {
+            left(ui);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                right(ui);
+            });
+        });
+    });
+}
+
+/// Vertical 1 px rule between cells.
+pub fn cell_rule(ui: &mut Ui) {
+    let (rect, _) = ui.allocate_exact_size(vec2(1.0, HEADER_H), Sense::hover());
+    ui.painter().rect_filled(rect, 0.0, theme::RULE_DARK);
+}
+
+/// Logo + wordmark cell; clicking goes Home.
+pub fn logo_cell(ui: &mut Ui) -> bool {
+    let (rect, resp) = ui.allocate_exact_size(vec2(214.0, HEADER_H), Sense::click());
+    resp.widget_info(|| WidgetInfo::labeled(Role::Link, true, "BestOfBurst home"));
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, 0.0, theme::RULE_DARK);
+    }
+    marks::wordmark(ui, pos2(rect.min.x + 20.0, rect.center().y), theme::TABLE, theme::SAFELIGHT);
+    theme::focus_ring(ui, &resp);
+    cell_rule(ui);
+    resp.clicked()
+}
+
+/// A text cell in the chrome bar.
+pub fn text_cell(ui: &mut Ui, text: &str, big: bool) {
+    ui.add_space(20.0);
+    if big {
+        ui.label(theme::xp(text, 15.0, theme::TABLE));
+    } else {
+        ui.label(theme::mono(text, 10.5, theme::ASH));
+    }
+    ui.add_space(20.0);
+    cell_rule(ui);
+}
+
+/// The full-height grease-red action cell (used in a right-to-left layout).
+pub fn red_cell(ui: &mut Ui, label: &str, key: &str, enabled: bool) -> bool {
+    let text = label.to_uppercase();
+    let g = theme::galley(ui, &text, theme::f_xp(14.0), theme::PAPER_WHITE, 0.5);
+    let key_w = 16.0 + 8.0 * key.len() as f32;
+    let w = g.size().x + key_w + 52.0;
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, HEADER_H), if enabled { Sense::click() } else { Sense::hover() });
+    resp.widget_info(|| WidgetInfo::labeled(Role::Button, enabled, label));
+    let fill = if !enabled {
+        theme::RED.gamma_multiply(0.4)
+    } else if resp.hovered() {
+        theme::RED_HOVER
+    } else {
+        theme::RED
+    };
+    ui.painter().rect_filled(rect, 0.0, fill);
+    ui.painter().galley(pos2(rect.min.x + 20.0, rect.center().y - g.size().y / 2.0), g, theme::PAPER_WHITE);
+    theme::keycap(ui, pos2(rect.max.x - 18.0, rect.center().y), key, theme::PAPER_WHITE);
+    theme::focus_ring(ui, &resp);
+    enabled && resp.clicked()
+}
+
+/// Glim drawn small inside the chrome bar.
+pub fn glim_cell(app: &mut BestOfBurstApp, ui: &mut Ui, mood: super::glim::Mood) {
+    let (rect, resp) = ui.allocate_exact_size(vec2(64.0, HEADER_H), Sense::click());
+    resp.widget_info(|| WidgetInfo::labeled(Role::Link, true, "Glim: open Glim's corner"));
+    let g = Rect::from_center_size(rect.center(), vec2(42.0, 42.0));
+    super::glim::paint(ui, g, mood, true, app.time(), app.reduced_motion, 1.0);
+    if resp.clicked() {
+        app.open_corner();
+    }
+    cell_rule(ui);
+}
+
+/// The status line shown in the header ("CPU x 3 THREADS").
+pub fn engine_status(app: &BestOfBurstApp) -> String {
+    format!("Engine · CPU × {} threads", app.threads)
+}
+
+/// Toast line for the last message, if any.
+pub fn message_line(app: &BestOfBurstApp, ui: &mut Ui, p: Pal) {
+    if let Some((msg, err, _)) = &app.message {
+        let c = if *err { p.mark } else { p.on_surface };
+        ui.label(theme::body(msg, 14.0, c));
+    }
+}
+
+pub fn center_text(ui: &Ui, rect: Rect, text: &str, p: Pal) {
+    theme::text_at(ui, rect.center(), Align2::CENTER_CENTER, text, theme::f_mono(11.0), p.muted, 0.88);
+}
+
 impl eframe::App for BestOfBurstApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         if let Some(rx) = &self.engine_rx {
             let msgs: Vec<EngineMsg> = rx.try_iter().collect();
@@ -454,17 +634,54 @@ impl eframe::App for BestOfBurstApp {
         self.textures.poll(&ctx); // uploads finished thumbnail decodes
 
         if let Some((_, _, at)) = &self.message {
-            if at.elapsed() > Duration::from_secs(8) {
+            if at.elapsed() > Duration::from_secs(10) {
                 self.message = None;
-            } else {
-                ctx.request_repaint_after(Duration::from_millis(500));
             }
         }
+
+        // Treats earned by settling close calls.
+        if let Some(rv) = &mut self.review {
+            if rv.pending_treats > 0 {
+                self.settings.treats += rv.pending_treats;
+                self.settings.settled += rv.pending_treats;
+                rv.pending_treats = 0;
+            }
+        }
+        match self.screen {
+            Screen::Review | Screen::Focus | Screen::Compare => {
+                if self.review_clock.is_none() {
+                    self.review_clock = Some(Instant::now());
+                }
+            }
+            Screen::Home => self.review_clock = None,
+            _ => {}
+        }
+
+        // Done is always the light table; Processing and Focus are always the darkroom.
+        let surface_night = match self.screen {
+            Screen::Done | Screen::Corner => false,
+            Screen::Progress | Screen::Focus | Screen::Compare => true,
+            _ => self.settings.night,
+        };
+        theme::apply_visuals(&ctx, theme::pal(surface_night));
 
         match self.screen {
             Screen::Home => home::show(self, ui),
             Screen::Progress => progress::show(self, ui),
             Screen::Review => review::show(self, ui),
+            Screen::Focus => focus::show(self, ui),
+            Screen::Compare => compare::show(self, ui),
+            Screen::Done => done::show(self, ui),
+            Screen::Corner => corner::show(self, ui),
+        }
+
+        if self.settings != self.saved_settings {
+            self.saved_settings = self.settings.clone();
+            save_json("settings.json", self.settings.clone());
+        }
+        if !self.reduced_motion {
+            // Glim's calm idle loop and mark draw-on.
+            ctx.request_repaint_after(Duration::from_millis(50));
         }
     }
 }
