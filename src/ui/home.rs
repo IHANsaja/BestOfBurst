@@ -16,7 +16,7 @@ const ENGINES: [(&str, &str); 3] = [("Automatic", "Best for this PC"), ("Graphic
 /// One hardware line: label, name, details; a safelight dot when it is in use.
 fn hw_row(ui: &mut egui::Ui, kind: &str, name: &str, detail: &str, used: bool) {
     ui.horizontal_top(|ui| {
-        let (r, _) = ui.allocate_exact_size(vec2(78.0, 18.0), Sense::hover());
+        let (r, _) = ui.allocate_exact_size(vec2(48.0, 18.0), Sense::hover());
         theme::text_at(ui, r.left_center(), Align2::LEFT_CENTER, kind, theme::f_mono_semi(10.5), if used { theme::SAFELIGHT } else { theme::ASH }, 0.8);
         ui.vertical(|ui| {
             ui.label(theme::body(name, 14.0, theme::TABLE));
@@ -206,9 +206,9 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
             let snap = app.sys();
             let (gname, gdetail) = app::gpu_line(&snap);
             let gpu_used = app.settings.engine != EngineChoice::Cpu && matches!(crate::gpu::status(), Some(Ok(_)));
-            hw_row(ui, "Graphics", &gname, &gdetail, gpu_used);
+            hw_row(ui, "GPU", &gname, &gdetail, gpu_used);
             let cpu_detail = format!("{} cores · opens {} at once", snap.physical, theme::plural(app.threads, "photo"));
-            hw_row(ui, "Processor", "Your computer's processor", &cpu_detail, true);
+            hw_row(ui, "CPU", "Your computer's processor", &cpu_detail, true);
 
             let open = ui
                 .horizontal(|ui| {
