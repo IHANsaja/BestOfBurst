@@ -1,6 +1,6 @@
 [package]
 name = "bestofburst"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "Pick the best shots from a folder of photos. Offline, CPU only."
 license = "MIT"
