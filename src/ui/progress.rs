@@ -153,7 +153,7 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
             if r.max.x > strip.max.x {
                 break;
             }
-            if let Loaded::Ready(id, size) = app.textures.thumb(t) {
+            if let Loaded::Ready(id, size) = app.textures.thumb(t, None) {
                 ui.painter().image(id, theme::fit(size, r), Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), egui::Color32::WHITE);
             }
         }

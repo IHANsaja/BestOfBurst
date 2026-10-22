@@ -1,5 +1,5 @@
 //! The egui window in the Grease Pencil design (DESIGN.md): Home, Processing, Review, Focus,
-//! Compare, Done and Glim's corner, over the same engine as the CLI.
+//! Compare, the full-screen Viewer, Done and Glim's corner, over the same engine as the CLI.
 
 pub mod app;
 pub mod compare;
@@ -14,6 +14,7 @@ pub mod progress;
 pub mod review;
 pub mod textures;
 pub mod theme;
+pub mod viewer;
 
 use std::path::PathBuf;
 

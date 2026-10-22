@@ -263,6 +263,10 @@ pub fn read_orientation(path: &Path, format: Format) -> u32 {
         return o;
     }
     if format == Format::Raw {
+        let mut cr3 = || cr3_exif(path);
+        if let Some(o) = from(&mut cr3) {
+            return o;
+        }
         if let Some(o) = raw_embedded_exif(path).and_then(|ex| {
             ex.get_field(exif::Tag::Orientation, exif::In::PRIMARY)
                 .and_then(|f| f.value.get_uint(0))
@@ -271,6 +275,34 @@ pub fn read_orientation(path: &Path, format: Format) -> u32 {
         }
     }
     1
+}
+
+/// EXIF orientation, remembered per file so thumbnails and previews read each file once.
+pub fn orientation_cached(path: &Path, format: Format) -> u32 {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<std::path::PathBuf, u32>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(o) = cache.lock().ok().and_then(|c| c.get(path).copied()) {
+        return o;
+    }
+    let o = read_orientation(path, format);
+    if let Ok(mut c) = cache.lock() {
+        c.insert(path.to_path_buf(), o);
+    }
+    o
+}
+
+/// EXIF of a Canon CR3: IFD0 is a TIFF block in the `CMT1` box, which kamadak-exif cannot find.
+pub fn cr3_exif(path: &Path) -> Option<exif::Exif> {
+    let file = std::fs::File::open(path).ok()?;
+    // SAFETY: read-only map of an original, see decode_raw_preview.
+    let map = unsafe { memmap2::Mmap::map(&file).ok()? };
+    let head = &map[..map.len().min(1 << 20)];
+    let at = memchr::memmem::find(head, b"CMT1")?;
+    let size = u32::from_be_bytes(head.get(at.checked_sub(4)?..at)?.try_into().ok()?) as usize;
+    let data = map.get(at + 4..(at - 4).checked_add(size)?)?;
+    exif::Reader::new().read_raw(data.to_vec()).ok()
 }
 
 /// EXIF from the embedded JPEG previews of a RAW file, for containers kamadak-exif cannot read.

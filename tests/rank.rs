@@ -120,14 +120,57 @@ fn picks_respect_target_group_limit_and_rejects() {
     assert!(dark.reasons.contains(&"too_dark".to_string()));
     assert!(dark.reasons.contains(&"underexposed".to_string()));
 
+    // Every group has 4 frames, so each keeps one even though only 2 were asked for.
     let r = run_rank(e.clone(), 2, 1);
-    assert_eq!(r.iter().filter(|x| x.status == Status::Pick).count(), 2);
+    assert_eq!(r.iter().filter(|x| x.status == Status::Pick).count(), 3);
     let ranks: Vec<usize> = r.iter().filter_map(|x| x.rank).collect();
-    assert_eq!(ranks.len(), 2);
+    assert_eq!(ranks.len(), 3);
 
     // Default max-per-group 1: one pick per group even with a big target.
     let r = run_rank(e, 100, 1);
     assert_eq!(r.iter().filter(|x| x.status == Status::Pick).count(), 3);
+}
+
+#[test]
+fn every_pose_shot_three_times_keeps_one() {
+    let mut e = Vec::new();
+    // A pose shot 3 times in a dim room: low brightness, deep shadows, softer than the rest.
+    for k in 0..3 {
+        let mut x = entry(&format!("dim_{k}"), 300.0 + k as f32, near(A, k as u32), k as i64 * 400);
+        x.metrics.mean_luma = 0.12;
+        x.metrics.clip_shadows = 0.35;
+        x.metrics.contrast = 0.08;
+        e.push(x);
+    }
+    // A pose shot 4 times where every frame is out of focus: nothing to keep.
+    for k in 0..4 {
+        e.push(entry(&format!("soft_{k}"), 3.0, near(B, k as u32), 100_000 + k as i64 * 400));
+    }
+    // Five bright pairs that would win on score alone.
+    for (g, h) in [C, D, !A, !B, !C].iter().enumerate() {
+        for k in 0..2 {
+            e.push(entry(&format!("pair{g}_{k}"), 800.0 + g as f32, near(*h, k as u32), 200_000 + g as i64 * 100_000 + k as i64 * 400));
+        }
+    }
+    let r = run_rank(e, 2, 1);
+    let picked = |p: &str| r.iter().filter(|x| x.path.starts_with(p) && x.status == Status::Pick).count();
+    assert_eq!(picked("dim_"), 1, "the dim pose keeps its best frame");
+    assert_eq!(picked("soft_"), 0, "set-aside frames are never picked");
+    assert_eq!(picked("pair"), 1, "the place left in the target goes to the best of the rest");
+}
+
+#[test]
+fn dim_scenes_keep_most_of_their_exposure_credit() {
+    let mut m = metrics(500.0);
+    let mid = rank::exposure(&m);
+    m.mean_luma = 0.12;
+    m.clip_shadows = 0.35;
+    let dim = rank::exposure(&m);
+    assert!(dim > 0.4 * mid, "dim {dim} vs mid {mid}");
+    m.mean_luma = 0.45;
+    m.clip_shadows = 0.0;
+    m.clip_highlights = 0.2;
+    assert!(rank::exposure(&m) < 0.25 * mid, "blown highlights still cost the most");
 }
 
 #[test]

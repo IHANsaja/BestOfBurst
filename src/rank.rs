@@ -28,6 +28,15 @@ pub const LOW_CONTRAST: f32 = 0.03;
 /// Top two group scores closer than this flag a close call.
 pub const CLOSE_CALL_POINTS: f32 = 5.0;
 
+/// A same-shot group of at least this many frames always gets a keeper (its best usable frame),
+/// even past the target: a pose shot over and over mattered to the photographer.
+pub const SURE_GROUP_MIN: usize = 3;
+
+/// Mean brightness inside this band earns full exposure credit; dim and bright scenes are a
+/// style, so outside it the credit eases off toward the too-dark / too-bright limits.
+pub const KEY_LOW: f32 = 0.18;
+pub const KEY_HIGH: f32 = 0.72;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Status {
     Pick,
@@ -339,9 +348,20 @@ pub fn apply_rejects(e: &mut [Entry]) {
     }
 }
 
+/// Exposure 0..1. A low-key evening portrait or a bright window silhouette is not a fault: the
+/// mood alone never costs more than half, and deep shadows cost half as much as before. Blown
+/// highlights still cost the most.
 pub fn exposure(m: &Metrics) -> f32 {
-    let centre = 1.0 - ((m.mean_luma - 0.45).abs() / 0.35).min(1.0);
-    centre * (1.0 - (4.0 * m.clip_highlights).min(1.0)) * (1.0 - (2.0 * m.clip_shadows).min(1.0))
+    let l = m.mean_luma;
+    let band = if l < KEY_LOW {
+        (l - TOO_DARK_LUMA) / (KEY_LOW - TOO_DARK_LUMA)
+    } else if l > KEY_HIGH {
+        (TOO_BRIGHT_LUMA - l) / (TOO_BRIGHT_LUMA - KEY_HIGH)
+    } else {
+        1.0
+    };
+    let mood = 0.5 + 0.5 * band.clamp(0.0, 1.0);
+    mood * (1.0 - (4.0 * m.clip_highlights).min(1.0)) * (1.0 - m.clip_shadows.min(1.0))
 }
 
 /// Mid-rank percentiles among the eligible values (ties share their average rank; a single
@@ -487,7 +507,10 @@ pub fn group_scores(e: &mut [Entry], weights: &[f32; 5]) -> BTreeMap<u64, [f32; 
     centers
 }
 
-/// Step 4: the best N, at most `max_per_group` from one same-shot group.
+/// Step 4: the best N, at most `max_per_group` from one same-shot group. First every group of
+/// `SURE_GROUP_MIN`+ frames gets its best usable frame, so no pose goes missing even past N;
+/// then the remaining places go to the best of the rest. Set-aside frames are never picked, so
+/// a group that is set aside entirely gets nothing.
 pub fn select(e: &mut [Entry], target: usize, max_per_group: usize) {
     let mut groups: BTreeMap<u64, Vec<usize>> = BTreeMap::new();
     for (i, f) in e.iter().enumerate() {
@@ -498,12 +521,20 @@ pub fn select(e: &mut [Entry], target: usize, max_per_group: usize) {
     for g in groups.values_mut() {
         g.sort_by(|&a, &b| better_in_group(&e[a], &e[b]));
     }
-    let mut picks: Vec<usize> = Vec::new();
+    let mut picks: Vec<usize> = groups
+        .values()
+        .map(|g| g[0])
+        .filter(|&i| e[i].group_size >= SURE_GROUP_MIN)
+        .collect();
     for round in 0..max_per_group.max(1) {
         if picks.len() >= target {
             break;
         }
-        let mut tier: Vec<usize> = groups.values().filter_map(|g| g.get(round).copied()).collect();
+        let mut tier: Vec<usize> = groups
+            .values()
+            .filter_map(|g| g.get(round).copied())
+            .filter(|i| !(round == 0 && e[*i].group_size >= SURE_GROUP_MIN))
+            .collect();
         tier.sort_by(|&a, &b| better(&e[a], &e[b]));
         for i in tier {
             if picks.len() >= target {
