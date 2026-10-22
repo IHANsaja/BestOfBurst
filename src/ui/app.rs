@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use super::review::Review;
 use super::textures::Textures;
 use super::theme::{self, Pal};
-use super::{compare, corner, done, focus, help, home, marks, progress, review};
+use super::{compare, corner, done, focus, help, home, marks, progress, review, viewer};
 use crate::engine::EngineChoice;
 use crate::sysmon::{self, Monitor, Snapshot};
 use crate::engine::{self, Event, RunConfig};
@@ -34,6 +34,7 @@ pub enum Screen {
     Review,
     Focus,
     Compare,
+    Viewer,
     Done,
     Corner,
     Help,
@@ -160,6 +161,8 @@ pub struct BestOfBurstApp {
     pub last_delivery: Option<OutputSummary>,
     pub help_return: Screen,
     pub monitor: Monitor,
+    /// Whether the window was last told to fill the monitor (the viewer and full-screen compare).
+    fullscreen: bool,
 }
 
 /// Writes `state.json` on its own thread, always the newest snapshot.
@@ -225,6 +228,7 @@ impl BestOfBurstApp {
             last_delivery: None,
             help_return: Screen::Home,
             monitor: Monitor::start(),
+            fullscreen: false,
         };
         // Start the graphics card in the background so Home can show it without waiting.
         std::thread::spawn(|| {
@@ -830,7 +834,7 @@ impl eframe::App for BestOfBurstApp {
             }
         }
         match self.screen {
-            Screen::Review | Screen::Focus | Screen::Compare => {
+            Screen::Review | Screen::Focus | Screen::Compare | Screen::Viewer => {
                 if self.review_clock.is_none() {
                     self.review_clock = Some(Instant::now());
                 }
@@ -842,10 +846,21 @@ impl eframe::App for BestOfBurstApp {
         // Done is always the light table; Processing and Focus are always the darkroom.
         let surface_night = match self.screen {
             Screen::Done | Screen::Corner | Screen::Help => false,
-            Screen::Progress | Screen::Focus | Screen::Compare => true,
+            Screen::Progress | Screen::Focus | Screen::Compare | Screen::Viewer => true,
             _ => self.settings.night,
         };
         theme::apply_visuals(&ctx, theme::pal(surface_night));
+
+        // The viewer and full-screen compare fill the monitor; every other screen gives it back.
+        let want_full = match self.screen {
+            Screen::Viewer => true,
+            Screen::Compare => self.review.as_ref().and_then(|r| r.cmp.as_ref()).is_some_and(|c| c.full),
+            _ => false,
+        };
+        if want_full != self.fullscreen {
+            self.fullscreen = want_full;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(want_full));
+        }
 
         match self.screen {
             Screen::Home => home::show(self, ui),
@@ -853,6 +868,7 @@ impl eframe::App for BestOfBurstApp {
             Screen::Review => review::show(self, ui),
             Screen::Focus => focus::show(self, ui),
             Screen::Compare => compare::show(self, ui),
+            Screen::Viewer => viewer::show(self, ui),
             Screen::Done => done::show(self, ui),
             Screen::Corner => corner::show(self, ui),
             Screen::Help => help::show(self, ui),

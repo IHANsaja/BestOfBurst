@@ -7,7 +7,7 @@ use eframe::egui::{self, pos2, vec2, Align2, Color32, Key, Rect, Stroke, Ui};
 
 use super::app::{self, BestOfBurstApp, Screen};
 use super::glim::{self, Mood};
-use super::review::{self, file_name, frame_card, run_view, status_word, CardOpts, Nav, Review, FULL_UV};
+use super::review::{self, file_name, frame_card, run_view, status_word, CardOpts, Nav, Review};
 use super::textures::Loaded;
 use super::theme::{self, Btn};
 use crate::rank::Status;
@@ -87,6 +87,9 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
                 Key::X => rv.set_status(view_idx, Some(Status::Reject)),
                 Key::Num0 => rv.set_status(view_idx, None),
                 Key::Z => big = !big,
+                Key::R => rv.rotate(view_idx, 1),
+                Key::L => rv.rotate(view_idx, -1),
+                Key::F => nav = rv.open_viewer(members.clone(), view_idx, Screen::Focus),
                 Key::Enter => nav = keep_and_next(rv),
                 Key::N => {
                     if let Some(n) = rv.next_close_call(Some(group)) {
@@ -266,21 +269,20 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         let path = rv.abs_path(view_idx);
         let aside = matches!(rv.ranking.entries[view_idx].effective(), Status::Reject | Status::Failed);
         let tint = if aside { theme::ASIDE_TINT } else { Color32::WHITE };
+        let turns = rv.rotation(view_idx);
         let mut img_rect = area;
         match app.textures.preview(&path, fmt) {
-            Loaded::Ready(id, size) => {
-                img_rect = theme::fit(size, area);
-                ui.painter().image(id, img_rect, FULL_UV, tint);
-            }
+            Loaded::Ready(id, size) => img_rect = theme::image_turned(ui, id, size, area, turns, tint),
             Loaded::Failed(e) => app::center_text(ui, area, &e, p),
             Loaded::Loading => {
-                if let Some(t) = rv.thumb_path(view_idx) {
-                    if let Loaded::Ready(id, size) = app.textures.thumb(&t) {
-                        img_rect = theme::fit(size, area);
-                        ui.painter().image(id, img_rect, FULL_UV, tint);
-                    }
+                if let Some(Loaded::Ready(id, size)) = rv.thumb(&mut app.textures, view_idx) {
+                    img_rect = theme::image_turned(ui, id, size, area, turns, tint);
                 }
             }
+        }
+        let open_full = ui.interact(img_rect, ui.scope_id().with("focus_full"), egui::Sense::click());
+        if open_full.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ZoomIn);
         }
         let t = rv.mark_t(view_idx, app.reduced_motion);
         match rv.ranking.entries[view_idx].effective() {
@@ -293,6 +295,9 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         // Loupe: the subject at 100 %, the only element with a shadow.
         let ls = if big { 460.0 } else { 300.0 };
         let lens = Rect::from_min_size(pos2(area.max.x - ls - 8.0, area.max.y - ls - 8.0), vec2(ls, ls));
+        if open_full.clicked() && !open_full.interact_pointer_pos().is_some_and(|p| lens.contains(p)) {
+            nav = rv.open_viewer(members.clone(), view_idx, Screen::Focus);
+        }
         theme::loupe_shadow(ui, lens);
         ui.painter().rect_filled(lens, 0.0, theme::FILM);
         let center = rv.center_of(view_idx);
@@ -301,7 +306,7 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
                 // Show a square window of the crop at 1 image pixel per point.
                 let side = size.x.min(size.y).min(ls);
                 let uv = Rect::from_center_size(pos2(0.5, 0.5), vec2(side / size.x, side / size.y));
-                ui.painter().image(id, lens.shrink(2.0), uv, tint);
+                theme::paint_turned(ui.painter(), id, lens.shrink(2.0), uv, turns, tint);
             }
             Loaded::Loading => app::center_text(ui, lens, "DEVELOPING LOUPE...", p),
             Loaded::Failed(_) => app::center_text(ui, lens, "NO LOUPE", p),
@@ -313,6 +318,8 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         let tag = Rect::from_min_size(lens.left_bottom() + vec2(2.0, -22.0), vec2(64.0, 20.0));
         ui.painter().rect_filled(tag, 0.0, theme::INK);
         theme::text_at(ui, tag.left_center() + vec2(6.0, 0.0), Align2::LEFT_CENTER, "Z BIGGER", theme::f_mono(10.0), theme::ASH, 0.8);
+        let hint = "CLICK OR F FULL SCREEN · R / L TURN";
+        theme::text_at(ui, area.left_bottom() + vec2(0.0, -4.0), Align2::LEFT_BOTTOM, hint, theme::f_mono(10.0), theme::ASH, 0.6);
     });
     nav
 }

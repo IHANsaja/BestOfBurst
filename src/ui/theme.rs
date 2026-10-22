@@ -571,6 +571,33 @@ pub fn fit(size: egui::Vec2, rect: Rect) -> Rect {
     Rect::from_center_size(rect.center(), size * s)
 }
 
+/// On-screen size of `size` after `turns` quarter turns.
+pub fn turned(size: egui::Vec2, turns: u8) -> egui::Vec2 {
+    if turns % 2 == 1 { vec2(size.y, size.x) } else { size }
+}
+
+/// Paint the `uv` window of a texture turned `turns` quarter turns clockwise, filling `target`
+/// (already sized with `turned`).
+pub fn paint_turned(painter: &egui::Painter, id: egui::TextureId, target: Rect, uv: Rect, turns: u8, tint: Color32) {
+    let screen = [target.left_top(), target.right_top(), target.right_bottom(), target.left_bottom()];
+    let tex = [uv.left_top(), uv.right_top(), uv.right_bottom(), uv.left_bottom()];
+    let mut mesh = egui::Mesh::with_texture(id);
+    for (k, pos) in screen.into_iter().enumerate() {
+        let uv = tex[(k + 4 - (turns % 4) as usize) % 4];
+        mesh.vertices.push(egui::epaint::Vertex { pos, uv, color: tint });
+    }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    painter.add(egui::Shape::mesh(mesh));
+}
+
+/// Fit a whole texture turned `turns` quarter turns into `area` and paint it; returns where.
+pub fn image_turned(ui: &Ui, id: egui::TextureId, size: egui::Vec2, area: Rect, turns: u8, tint: Color32) -> Rect {
+    let target = fit(turned(size, turns), area);
+    paint_turned(ui.painter(), id, target, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), turns, tint);
+    target
+}
+
 pub fn text_at(ui: &Ui, pos: Pos2, align: Align2, text: &str, font: FontId, color: Color32, spacing: f32) -> Rect {
     let g = galley(ui, text, font, color, spacing);
     let rect = align.anchor_size(pos, g.size());

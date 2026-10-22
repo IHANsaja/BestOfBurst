@@ -5,7 +5,7 @@ use eframe::egui::{self, Key, Ui};
 use super::app::{self, BestOfBurstApp};
 use super::theme::{self, Btn};
 
-pub const KEEP: &str = "How many photos you want to end up with. Click the box and type a number (like 300 for a wedding album) or a share of the shoot (like 10%), or use the quick buttons. BestOfBurst circles that many of the best and puts them in a \"picks\" folder. You can change it later without starting over.";
+pub const KEEP: &str = "How many photos you want to end up with. Click the box and type a number (like 300 for a wedding album) or a share of the shoot (like 10%), or use the quick buttons. BestOfBurst circles that many of the best and puts them in a \"picks\" folder. Every pose you shot three or more times always gets its best frame circled too, even if that means a few more than you asked for, so no moment goes missing. You can change it later without starting over.";
 
 pub const SHOT_TYPE: &str = "What kind of shoot this is, so BestOfBurst knows what matters most. General suits weddings, events and everyday shoots. Portrait cares more about good light and clean skin. Sports cares most about sharp, frozen action. Landscape cares more about contrast and colour.";
 
@@ -24,10 +24,11 @@ pub const SECTIONS: &[(&str, &str)] = &[
     ("Speed: graphics card or processor", ENGINE),
     ("Photos at once", THREADS),
     ("Your computer now", LIVE),
-    ("The loupe and compare", "The loupe shows one moment at a time with the subject at 100 % so you can check eyes and focus. Press Enter to keep the circled frame and go to the next close call, or P to move the circle. Compare shows two frames on top of each other: wipe with the mouse or blink between them."),
+    ("The loupe and compare", "The loupe shows one moment at a time with the subject at 100 % so you can check eyes and focus. Press Enter to keep the circled frame and go to the next close call, or P to move the circle. Compare shows two frames on top of each other: wipe with the mouse or blink between them. Press F in compare to fill the screen."),
+    ("Full screen and turning photos", "Click the selected photo (or press F) to see it full size on the whole screen. Scroll or press + and - to zoom, drag to move around, double-click or Z for 100 %, and the arrows for the next photo. Photos are shown the right way up, the same as in File Explorer. If one is still on its side, press R or L (or the Turn buttons) to turn it. Turning only changes how BestOfBurst shows the photo; your files are never changed."),
     ("Delivering", "Deliver puts your keepers in a \"picks\" folder inside your shoot folder. Normally these are shortcuts: they look and open like the real photos but use no extra disk space, and deleting one never deletes your original. But if you edit and save a photo inside picks, the original changes too. Tick \"Make full copies\" if you plan to edit them there."),
     ("Glim", "Glim is the little lens helper. Every close call you settle earns a treat; spend them in Glim's corner. After 20 minutes of reviewing, Glim suggests a short break for your eyes."),
-    ("Keyboard", "F1 help. Arrows move. P keeper, U maybe, X set aside, 0 clear. Space opens the loupe, N the next close call, C compare. Ctrl+Z undo, Ctrl+E deliver. Esc goes back."),
+    ("Keyboard", "F1 help. Arrows move. P keeper, U maybe, X set aside, 0 clear. Space opens the loupe, N the next close call, C compare, F full screen. R / L turn a photo. + / - zoom. Ctrl+Z undo, Ctrl+E deliver. Esc goes back."),
 ];
 
 /// A small "?" key-cap button that toggles an inline explanation; returns whether it is open.

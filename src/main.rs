@@ -272,6 +272,8 @@ fn cmd_run(a: RunArgs) -> Result<()> {
 fn print_summary(s: &RankSummary, picks_dir: &Path, cfg: &RunConfig) {
     let picks = if s.picks < s.target && cfg.keep != Keep::Count(0) {
         format!("{} of {} requested", thousands(s.picks), thousands(s.target))
+    } else if s.picks > s.target {
+        format!("{} ({} requested, plus one from every pose shot 3+ times)", thousands(s.picks), thousands(s.target))
     } else {
         thousands(s.picks)
     };

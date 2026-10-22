@@ -96,6 +96,10 @@ pub struct State {
     /// relative path -> "pick" | "maybe" | "reject"
     #[serde(default)]
     pub overrides: BTreeMap<String, String>,
+    /// relative path -> quarter turns clockwise (1..=3) the user added on top of EXIF.
+    /// Display only: delivered files are never rotated.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub rotations: BTreeMap<String, u8>,
 }
 
 pub fn now_string() -> String {
@@ -113,6 +117,7 @@ impl State {
             files: BTreeMap::new(),
             last_rank: None,
             overrides: BTreeMap::new(),
+            rotations: BTreeMap::new(),
         }
     }
 

@@ -1,5 +1,6 @@
 //! Compare (screen 5): wipe or blink between the keeper (A) and the runner-up (B).
-//! 1 / 2 choose; W wipe, B blink, Space flips manually; arrows pick another B; Z 100 % crop.
+//! 1 / 2 choose; W wipe, B blink, Space flips manually; arrows pick another B; Z 100 % crop;
+//! + / - zoom; R / L turn both photos; F full screen.
 
 use std::time::{Duration, Instant};
 
@@ -12,6 +13,8 @@ use super::theme::{self, Btn};
 use crate::rank::Status;
 
 const BLINK: Duration = Duration::from_millis(450);
+const ZOOM_MAX: f32 = 12.0;
+const ZOOM_STEP: f32 = 1.25;
 
 pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
     run_view(app, ui, view);
@@ -20,6 +23,16 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
 fn back(rv: &mut Review) -> Nav {
     rv.cmp = None;
     if rv.focus.is_some() { Nav::To(Screen::Focus) } else { Nav::To(Screen::Review) }
+}
+
+/// A drag on screen, as a move across the texture of a photo turned `turns` quarters clockwise.
+fn unturn(d: egui::Vec2, turns: u8) -> egui::Vec2 {
+    match turns % 4 {
+        1 => vec2(d.y, -d.x),
+        2 => -d,
+        3 => vec2(-d.y, d.x),
+        _ => d,
+    }
 }
 
 fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
@@ -49,6 +62,14 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
                     c.show_b = !c.show_b;
                 }
                 Key::Z => c.crop = !c.crop,
+                Key::Plus | Key::Equals => c.zoom = (c.zoom * ZOOM_STEP).min(ZOOM_MAX),
+                Key::Minus => c.zoom = (c.zoom / ZOOM_STEP).max(1.0),
+                Key::F => c.full = !c.full,
+                Key::R | Key::L => {
+                    let q = if key == Key::R { 1 } else { -1 };
+                    rv.rotate(a, q);
+                    rv.rotate(b, q);
+                }
                 Key::ArrowRight | Key::ArrowLeft => {
                     let others: Vec<usize> = members.iter().copied().filter(|&m| m != a).collect();
                     if let Some(k) = others.iter().position(|&m| m == b) {
@@ -57,6 +78,7 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
                         c.b = b;
                     }
                 }
+                Key::Escape if c.full => c.full = false,
                 Key::Escape => nav = back(rv),
                 _ => {}
             }
@@ -66,23 +88,26 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         return nav;
     }
 
+    let full = rv.cmp.as_ref().is_some_and(|c| c.full);
     let mut home = false;
     let mut esc = false;
-    app::chrome_bar(
-        ui,
-        "compare_header",
-        |ui| {
-            home = app::logo_cell(ui);
-            app::text_cell(ui, "Compare · A (circled) and B", true);
-        },
-        |ui| {
-            ui.add_space(16.0);
-            ui.visuals_mut().override_text_color = Some(theme::TABLE);
-            esc = theme::button(ui, "Back", Some("Esc"), Btn::MonoSmall, 40.0, None, true).clicked();
-            ui.add_space(16.0);
-            app::cell_rule(ui);
-        },
-    );
+    if !full {
+        app::chrome_bar(
+            ui,
+            "compare_header",
+            |ui| {
+                home = app::logo_cell(ui);
+                app::text_cell(ui, "Compare · A (circled) and B", true);
+            },
+            |ui| {
+                ui.add_space(16.0);
+                ui.visuals_mut().override_text_color = Some(theme::TABLE);
+                esc = theme::button(ui, "Back", Some("Esc"), Btn::MonoSmall, 40.0, None, true).clicked();
+                ui.add_space(16.0);
+                app::cell_rule(ui);
+            },
+        );
+    }
     if home {
         rv.cmp = None;
         return Nav::Home;
@@ -90,6 +115,8 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
     if esc {
         return back(rv);
     }
+    let (turn_a, turn_b) = (rv.rotation(a), rv.rotation(b));
+    let mut turn: [i8; 2] = [0, 0];
 
     let frame = egui::Frame::new().fill(p.surface).inner_margin(20.0);
     egui::CentralPanel::default().frame(frame).show(ui, |ui| {
@@ -118,18 +145,50 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
                 }
             });
         });
-        ui.add_space(10.0);
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            ui.visuals_mut().override_text_color = Some(theme::TABLE);
+            if theme::button(ui, "Zoom out", Some("-"), Btn::MonoSmall, 36.0, None, c.zoom > 1.0).clicked() {
+                c.zoom = (c.zoom / ZOOM_STEP).max(1.0);
+            }
+            if theme::button(ui, "Zoom in", Some("+"), Btn::MonoSmall, 36.0, None, c.zoom < ZOOM_MAX).clicked() {
+                c.zoom = (c.zoom * ZOOM_STEP).min(ZOOM_MAX);
+            }
+            if theme::button(ui, "Fit", None, Btn::MonoSmall, 36.0, None, c.zoom > 1.0).clicked() {
+                c.zoom = 1.0;
+                c.center = vec2(0.5, 0.5);
+            }
+            theme::text_at(ui, ui.cursor().min + vec2(8.0, 18.0), Align2::LEFT_CENTER, &format!("{:.0}%", c.zoom * 100.0), theme::f_mono_semi(10.5), theme::EDGE, 0.6);
+            ui.add_space(64.0);
+            if theme::button(ui, "Turn both", Some("R"), Btn::MonoSmall, 36.0, None, true).clicked() {
+                turn = [1, 1];
+            }
+            if theme::button(ui, "Turn A", None, Btn::MonoSmall, 36.0, None, true).clicked() {
+                turn[0] = 1;
+            }
+            if theme::button(ui, "Turn B", None, Btn::MonoSmall, 36.0, None, true).clicked() {
+                turn[1] = 1;
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let label = if c.full { "Exit full screen" } else { "Full screen" };
+                if theme::button(ui, label, Some("F"), Btn::MonoSmall, 36.0, None, true).clicked() {
+                    c.full = !c.full;
+                }
+            });
+        });
+        ui.add_space(8.0);
         let area = Rect::from_min_max(ui.cursor().min, ui.max_rect().max - vec2(0.0, 22.0));
         let resp = ui.allocate_rect(area, Sense::click_and_drag());
         if resp.hovered() {
             let scroll = ctx.input(|i| i.smooth_scroll_delta.y);
             if scroll != 0.0 {
-                c.zoom = (c.zoom * (1.0 + scroll * 0.002)).clamp(1.0, 12.0);
+                c.zoom = (c.zoom * (1.0 + scroll * 0.002)).clamp(1.0, ZOOM_MAX);
             }
         }
         if resp.dragged() {
+            // Drag in A's frame of reference; B follows the same spot.
             let d = resp.drag_delta();
-            c.center -= vec2(d.x / area.width(), d.y / area.height()) / c.zoom;
+            c.center -= unturn(vec2(d.x / area.width(), d.y / area.height()), turn_a) / c.zoom;
         }
         if resp.double_clicked() {
             c.zoom = 1.0;
@@ -155,11 +214,11 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         };
         let la = tex(app, ia);
         let lb = tex(app, ib);
-        let paint = |ui: &Ui, l: &Loaded, clip: Rect| {
+        let paint = |ui: &Ui, l: &Loaded, clip: Rect, turns: u8| {
             if let Loaded::Ready(id, size) = l {
                 let visible = vec2(size.x * uv.width(), size.y * uv.height());
-                let target = theme::fit(visible, area);
-                ui.painter().with_clip_rect(clip).image(*id, target, uv, Color32::WHITE);
+                let target = theme::fit(theme::turned(visible, turns), area);
+                theme::paint_turned(&ui.painter().with_clip_rect(clip), *id, target, uv, turns, Color32::WHITE);
             }
         };
         ui.painter().rect_filled(area, 0.0, theme::FILM);
@@ -179,15 +238,15 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         match mode {
             CmpMode::Wipe => {
                 let split = resp.hover_pos().map(|p| p.x).unwrap_or(area.center().x).clamp(area.min.x, area.max.x);
-                paint(ui, &la, Rect::from_min_max(area.min, pos2(split, area.max.y)));
-                paint(ui, &lb, Rect::from_min_max(pos2(split, area.min.y), area.max));
+                paint(ui, &la, Rect::from_min_max(area.min, pos2(split, area.max.y)), turn_a);
+                paint(ui, &lb, Rect::from_min_max(pos2(split, area.min.y), area.max), turn_b);
                 ui.painter().line_segment([pos2(split, area.min.y), pos2(split, area.max.y)], Stroke::new(2.0, theme::SAFELIGHT));
                 label(ui, area.left_top() + vec2(10.0, 10.0), Align2::LEFT_TOP, ia, "A");
                 label(ui, area.right_top() + vec2(-10.0, 10.0), Align2::RIGHT_TOP, ib, "B");
             }
             CmpMode::Blink => {
-                let (l, i, name) = if show_b { (&lb, ib, "B") } else { (&la, ia, "A") };
-                paint(ui, l, area);
+                let (l, i, name, turns) = if show_b { (&lb, ib, "B", turn_b) } else { (&la, ia, "A", turn_a) };
+                paint(ui, l, area, turns);
                 label(ui, area.left_top() + vec2(10.0, 10.0), Align2::LEFT_TOP, i, name);
                 theme::text_at(ui, area.right_top() + vec2(-12.0, 8.0), Align2::RIGHT_TOP, name, theme::f_xp_black(40.0), theme::SAFELIGHT, 0.0);
             }
@@ -200,13 +259,19 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
             ui,
             pos2(area.min.x, area.max.y + 6.0),
             Align2::LEFT_TOP,
-            "1 KEEP A · 2 KEEP B · W SLIDER · B FLIP · SPACE SWAP · ARROWS ANOTHER PHOTO · SCROLL TO ZOOM, DRAG TO MOVE · ESC BACK",
+            "1 KEEP A · 2 KEEP B · W SLIDER · B FLIP · SPACE SWAP · ARROWS ANOTHER PHOTO · SCROLL OR + / - ZOOM, DRAG TO MOVE · R / L TURN · F FULL SCREEN · ESC BACK",
             theme::f_mono(10.0),
             theme::ASH,
             0.6,
         );
     });
 
+    if turn[0] != 0 {
+        rv.rotate(a, turn[0]);
+    }
+    if turn[1] != 0 {
+        rv.rotate(b, turn[1]);
+    }
     if let Some(i) = choose {
         rv.set_status(i, Some(Status::Pick));
         rv.settle(group);

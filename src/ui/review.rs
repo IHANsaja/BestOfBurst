@@ -11,7 +11,7 @@ use eframe::egui::{self, pos2, vec2, Align2, Color32, Key, Rect, Role, Sense, St
 use super::app::{self, BestOfBurstApp, BgMsg, Screen};
 use super::glim::{self, Mood};
 use super::marks;
-use super::textures::Loaded;
+use super::textures::{Loaded, Textures};
 use super::theme::{self, Btn, Pal};
 use crate::output::{self, OutputOptions};
 use crate::rank::{self, better, better_in_group, Entry, Keep, Preset, Ranking, Status, PRESETS};
@@ -71,6 +71,20 @@ pub struct CompareState {
     pub zoom: f32,
     pub center: Vec2,
     pub crop: bool,
+    /// Full screen: the window fills the monitor and the title bar is hidden.
+    pub full: bool,
+}
+
+/// The full-screen viewer: one photo at a time with zoom, pan and rotate.
+pub struct ViewerState {
+    /// Entry indices the arrows step through, in order.
+    pub list: Vec<usize>,
+    pub idx: usize,
+    /// 1.0 fits the photo to the screen.
+    pub zoom: f32,
+    /// Offset of the photo's centre from the screen's centre, in points.
+    pub pan: Vec2,
+    pub back_to: Screen,
 }
 
 /// Where a view wants to go after this frame.
@@ -105,6 +119,7 @@ pub struct Review {
     dirty_since: Option<Instant>,
     pub focus: Option<FocusState>,
     pub cmp: Option<CompareState>,
+    pub viewer: Option<ViewerState>,
     pub writing: bool,
     pub write_opts: OutputOptions,
     /// group -> ok members, eligible first, best group score first.
@@ -204,6 +219,7 @@ impl Review {
             dirty_since: None,
             focus: None,
             cmp: None,
+            viewer: None,
             writing: false,
             write_opts: OutputOptions::default(),
             groups: HashMap::new(),
@@ -504,8 +520,33 @@ impl Review {
             zoom: 1.0,
             center: vec2(0.5, 0.5),
             crop: false,
+            full: false,
         });
         true
+    }
+
+    /// Open the full-screen viewer on `idx`; the arrows walk `list`.
+    pub fn open_viewer(&mut self, list: Vec<usize>, idx: usize, back_to: Screen) -> Nav {
+        let list = if list.contains(&idx) { list } else { vec![idx] };
+        self.viewer = Some(ViewerState { list, idx, zoom: 1.0, pan: Vec2::ZERO, back_to });
+        Nav::To(Screen::Viewer)
+    }
+
+    /// Quarter turns clockwise the user added to this photo (0..=3).
+    pub fn rotation(&self, idx: usize) -> u8 {
+        self.state.rotations.get(&self.ranking.entries[idx].path).copied().unwrap_or(0) % 4
+    }
+
+    /// Turn a photo a quarter clockwise (`1`) or anticlockwise (`-1`). Display only.
+    pub fn rotate(&mut self, idx: usize, quarters: i8) {
+        let path = self.ranking.entries[idx].path.clone();
+        let turns = (self.rotation(idx) as i8 + quarters).rem_euclid(4) as u8;
+        if turns == 0 {
+            self.state.rotations.remove(&path);
+        } else {
+            self.state.rotations.insert(path, turns);
+        }
+        self.mark_dirty();
     }
 
     pub fn abs_path(&self, idx: usize) -> PathBuf {
@@ -515,6 +556,12 @@ impl Review {
     pub fn thumb_path(&self, idx: usize) -> Option<PathBuf> {
         let e = &self.ranking.entries[idx];
         self.state.files.get(&e.path).and_then(|f| f.thumb.as_ref()).map(|t| self.out.join(t))
+    }
+
+    /// The upright analysis thumbnail of an entry (a stand-in while the preview loads).
+    pub fn thumb(&self, tex: &mut Textures, idx: usize) -> Option<Loaded> {
+        let t = self.thumb_path(idx)?;
+        Some(tex.thumb(&t, Some((&self.abs_path(idx), self.formats[idx]))))
     }
 
     pub fn center_of(&self, idx: usize) -> [f32; 2] {
@@ -643,7 +690,7 @@ pub fn frame_card(ui: &mut Ui, rv: &Review, app: &mut BestOfBurstApp, idx: usize
     let aside = matches!(status, Status::Reject | Status::Failed);
     let mut img_rect = img_area;
     if let Some(t) = rv.thumb_path(idx) {
-        if let Loaded::Ready(id, sz) = app.textures.thumb(&t) {
+        if let Loaded::Ready(id, sz) = app.textures.thumb(&t, None) {
             img_rect = theme::fit(sz, img_area);
             ui.painter().image(id, img_rect, FULL_UV, if aside && !o.plain { theme::ASIDE_TINT } else { Color32::WHITE });
         }
@@ -728,6 +775,14 @@ fn sheet(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
                 Key::U => sel.into_iter().for_each(|i| rv.set_status(i, Some(Status::Maybe))),
                 Key::X => sel.into_iter().for_each(|i| rv.set_status(i, Some(Status::Reject))),
                 Key::Num0 => sel.into_iter().for_each(|i| rv.set_status(i, None)),
+                Key::R => sel.into_iter().for_each(|i| rv.rotate(i, 1)),
+                Key::L => sel.into_iter().for_each(|i| rv.rotate(i, -1)),
+                Key::F => {
+                    if let Some(i) = sel {
+                        let list = rv.items.iter().map(|it| it.idx).collect();
+                        nav = rv.open_viewer(list, i, Screen::Review);
+                    }
+                }
                 Key::Space => {
                     if let Some(i) = sel {
                         let g = rv.ranking.entries[i].group;
@@ -1091,24 +1146,30 @@ fn detail(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) -> Opt
     ui.label(theme::mono("Selected photo", 11.0, p.muted));
     let w = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(vec2(w, w * 0.68), Sense::click());
-    resp.widget_info(|| WidgetInfo::labeled(Role::Image, true, format!("Preview of {}", file_name(&e.path))));
+    resp.widget_info(|| WidgetInfo::labeled(Role::Image, true, format!("Preview of {}, click for full screen", file_name(&e.path))));
     ui.painter().rect_filled(rect, 0.0, theme::FILM);
     let fmt = rv.formats[idx];
+    let turns = rv.rotation(idx);
     match app.textures.preview(&rv.abs_path(idx), fmt) {
         Loaded::Ready(id, size) => {
-            ui.painter().image(id, theme::fit(size, rect.shrink(6.0)), FULL_UV, Color32::WHITE);
+            theme::image_turned(ui, id, size, rect.shrink(6.0), turns, Color32::WHITE);
         }
         Loaded::Failed(_) => app::center_text(ui, rect, "PREVIEW FAILED", p),
         Loaded::Loading => {
-            if let Some(t) = rv.thumb_path(idx) {
-                if let Loaded::Ready(id, size) = app.textures.thumb(&t) {
-                    ui.painter().image(id, theme::fit(size, rect.shrink(6.0)), FULL_UV, Color32::WHITE);
-                }
+            if let Some(Loaded::Ready(id, size)) = rv.thumb(&mut app.textures, idx) {
+                theme::image_turned(ui, id, size, rect.shrink(6.0), turns, Color32::WHITE);
             }
         }
     }
-    if resp.double_clicked() && rv.open_focus(e.group, Some(idx)) {
-        nav = Some(Nav::To(Screen::Focus));
+    if resp.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::ZoomIn);
+        let tag = Rect::from_min_size(rect.right_bottom() - vec2(118.0, 24.0), vec2(114.0, 20.0));
+        ui.painter().rect_filled(tag, 0.0, theme::INK);
+        theme::text_at(ui, tag.center(), Align2::CENTER_CENTER, "FULL SCREEN · F", theme::f_mono_semi(10.0), theme::EDGE, 0.6);
+    }
+    if resp.clicked() {
+        let list = rv.items.iter().map(|it| it.idx).collect();
+        nav = Some(rv.open_viewer(list, idx, Screen::Review));
     }
     ui.add_space(6.0);
     ui.label(theme::xp(file_name(&e.path), 18.0, p.on_surface));
@@ -1149,6 +1210,23 @@ fn detail(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) -> Opt
         }
         if theme::button(ui, "Compare", Some("C"), Btn::MonoSmall, 40.0, Some(tw), e.group_size > 1).clicked() && rv.open_compare(e.group, None) {
             nav = Some(Nav::To(Screen::Compare));
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.visuals_mut().override_text_color = Some(p.on_surface);
+        let hw = ((full - 8.0) / 2.0).floor();
+        if theme::button(ui, "Turn left", Some("L"), Btn::MonoSmall, 40.0, Some(hw), true).clicked() {
+            rv.rotate(idx, -1);
+        }
+        if theme::button(ui, "Turn right", Some("R"), Btn::MonoSmall, 40.0, Some(hw), true).clicked() {
+            rv.rotate(idx, 1);
+        }
+    });
+    ui.scope(|ui| {
+        ui.visuals_mut().override_text_color = Some(p.on_surface);
+        if theme::button(ui, "Full screen", Some("F"), Btn::MonoSmall, 40.0, Some(full), true).clicked() {
+            let list = rv.items.iter().map(|it| it.idx).collect();
+            nav = Some(rv.open_viewer(list, idx, Screen::Review));
         }
     });
     ui.add_space(10.0);
