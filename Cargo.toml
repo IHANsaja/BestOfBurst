@@ -3,7 +3,8 @@ name = "bestofburst"
 version = "0.2.2"
 edition = "2021"
 description = "Pick the best shots from a folder of photos. Offline, CPU only."
-license = "MIT"
+license-file = "LICENSE"
+publish = false
 authors = ["Ihan Hansaja"]
 repository = "https://github.com/IHANsaja/BestOfBurst"
 
