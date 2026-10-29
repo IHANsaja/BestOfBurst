@@ -1,21 +1,142 @@
-MIT License
+BestOfBurst End User License Agreement (EULA)
 
-Copyright (c) 2026 Ihan Hansaja
+Version 1.0 - Effective [DATE]
+Copyright (c) 2026 Ihan Hansaja. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+PLEASE READ THIS AGREEMENT CAREFULLY. By installing, copying or using BestOfBurst
+(the "Software"), or by entering a license key, you agree to be bound by this
+Agreement. If you do not agree, do not install or use the Software.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Parties
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+"Licensor" means Ihan Hansaja, an individual based in Sri Lanka, [business name and
+address if registered]. "You" means the person or single legal entity that obtained
+the license key and uses the Software.
+
+2. What the Software is
+
+BestOfBurst is a Windows application that analyses folders of photographs, groups
+bursts and ranks the best frames. It runs on your computer. Your photographs are
+never uploaded by the Software, and the Software never modifies, moves, renames or
+deletes your original files.
+
+3. License grant
+
+Subject to this Agreement and payment of the applicable fee, the Licensor grants You
+a non-exclusive, non-transferable, non-sublicensable, revocable license to install and
+use the Software, in object-code form only, on up to [2] computers at one time, for
+Your own personal or professional photography work, including work for Your clients.
+
+A license key is required to use the Software beyond any trial period. Each license
+key is issued to one licensee (a person or one legal entity).
+
+4. Restrictions
+
+Except where this Agreement or applicable law expressly allows, You may not:
+
+  a. share, sell, rent, lease, lend, publish or otherwise make Your license key
+     available to anyone else, or use one key on more computers than allowed;
+  b. copy or redistribute the Software or its installers, except for backup copies
+     for Your own use;
+  c. reverse engineer, decompile, disassemble or attempt to derive the source code of
+     the Software, except to the extent such a restriction is prohibited by law;
+  d. remove, bypass, disable or tamper with the license key check, activation, trial
+     limits, or any copyright, trademark or other notice in the Software;
+  e. modify the Software or create derivative works from it;
+  f. offer the Software, or its functionality, to third parties as a service
+     (for example as a hosted or white-label culling service);
+  g. use the Software to infringe anyone's rights or break any law.
+
+5. Ownership
+
+The Software, including its code, design, algorithms, user interface, marks, logo and
+documentation, is owned by the Licensor and protected by copyright and other laws.
+This Agreement grants You a license to use the Software, not ownership of it. All
+rights not expressly granted are reserved.
+
+You keep all rights in Your photographs and in the files the Software produces from
+them (such as the picks folders and report.csv). The Licensor claims no rights in them.
+
+6. License key, activation and privacy
+
+The Software works offline. To validate a license key, the Software may check the key
+locally and, if online activation is enabled, send the license key and a
+non-reversible identifier of Your computer to the Licensor's activation service. No
+photographs, file names, folder contents or personal data from Your photographs are
+sent. Payment is handled by a third-party payment provider, whose terms and privacy
+policy apply to that transaction.
+
+The Licensor may use the activation information only to operate licensing, prevent
+misuse, and provide support. Contact: [support email].
+
+7. Updates
+
+The Licensor may release updates. Unless stated otherwise at purchase, a license
+includes all updates to the major version You purchased [and free updates for 12 months
+for later major versions]. The Licensor has no obligation to provide support or
+updates beyond this.
+
+8. Third-party components
+
+The Software includes open source components, each under its own license (for
+example egui, wgpu, image, zune-jpeg, jxl-oxide, rayon, and the Archivo and Martian
+Mono fonts under the SIL Open Font License 1.1). Their notices are listed in
+[THIRD-PARTY-LICENSES file or Help > About]. Nothing in this Agreement limits Your
+rights under those licenses in respect of those components.
+
+9. Fees and refunds
+
+The fee is as shown at purchase. [Refund policy, for example: You may request a refund
+within 14 days of purchase if the Software does not work as described and the Licensor
+cannot fix the problem.] Nothing in this Agreement limits any right You have under
+consumer protection law that cannot be excluded.
+
+10. Termination
+
+This Agreement lasts until terminated. It ends automatically, without notice, if You
+breach it. The Licensor may also revoke a license key that has been shared, refunded,
+charged back or used in breach of this Agreement. You may terminate at any time by
+uninstalling the Software and destroying all copies. On termination You must stop
+using the Software and delete all copies. Sections 4, 5, 11, 12 and 13 survive
+termination.
+
+11. Disclaimer of warranty
+
+THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE AND NON-INFRINGEMENT. THE LICENSOR DOES NOT WARRANT THAT THE SOFTWARE WILL BE
+ERROR-FREE OR UNINTERRUPTED, OR THAT ITS RANKINGS AND SELECTIONS WILL SUIT YOUR
+JUDGEMENT. The Software is an aid to selecting photographs. You are responsible for
+reviewing its decisions and for keeping backups of Your photographs.
+
+12. Limitation of liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE LICENSOR WILL NOT BE LIABLE FOR ANY
+INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL OR PUNITIVE DAMAGES, OR FOR LOSS OF
+PROFITS, REVENUE, DATA OR BUSINESS, ARISING OUT OF OR RELATED TO THE SOFTWARE OR THIS
+AGREEMENT. THE LICENSOR'S TOTAL LIABILITY FOR ANY CLAIM WILL NOT EXCEED THE AMOUNT YOU
+PAID FOR THE SOFTWARE IN THE 12 MONTHS BEFORE THE CLAIM. These limits do not apply to
+liability that cannot be limited by law.
+
+13. General
+
+  a. Governing law. This Agreement is governed by the laws of Sri Lanka, without regard
+     to its conflict-of-law rules, and the courts of Sri Lanka have jurisdiction,
+     except where mandatory consumer law in Your country gives You the right to bring
+     a claim in Your home courts.
+  b. Entire agreement. This is the entire agreement about the Software and replaces
+     earlier versions. Versions of the Software released before this Agreement, if any,
+     remain under the license they were released with; this Agreement applies to this
+     and later versions.
+  c. Changes. The Licensor may update this Agreement for future versions. Continued use
+     of a later version means You accept its Agreement.
+  d. Severability. If a provision is unenforceable, the rest stays in force.
+  e. No waiver. Failing to enforce a right is not a waiver of it.
+  f. Assignment. You may not assign this Agreement without written consent. The
+     Licensor may assign it as part of a sale of the Software.
+  g. Export. You are responsible for complying with laws that apply to Your use of the
+     Software.
+
+14. Contact
+
+Questions, license problems and permission requests: [support email] / [website].

@@ -13,7 +13,7 @@
   <img alt="Works offline" src="https://img.shields.io/badge/works-100%25%20offline-E6E4DE?style=flat-square&labelColor=121211">
   <img alt="GPU accelerated" src="https://img.shields.io/badge/GPU-DirectX%2012%20%C2%B7%20Vulkan-D9A441?style=flat-square&labelColor=121211">
   <img alt="Written in Rust" src="https://img.shields.io/badge/made%20with-Rust-D9A441?style=flat-square&labelColor=121211&logo=rust&logoColor=E6E4DE">
-  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/github/license/IHANsaja/BestOfBurst?style=flat-square&labelColor=121211&color=5C5A55"></a>
+  <a href="LICENSE"><img alt="Proprietary license" src="https://img.shields.io/badge/license-proprietary-5C5A55?style=flat-square&labelColor=121211"></a>
 </p>
 
 <p align="center"><b>BestOfBurst culls a shoot for you.</b> Drop in a folder of thousands of photos and it stacks every burst, sets aside the out-of-focus and badly exposed frames, and circles the best photo of each moment. You only look where it's a genuine close call.</p>
@@ -247,6 +247,6 @@ The logo is a burst of twelve frames around an aperture, with one frame lit and 
 
 ## License
 
-[MIT](LICENSE) © 2026 Ihan Hansaja.
+Proprietary software. Copyright © 2026 Ihan Hansaja. All rights reserved. Use is governed by the [End User License Agreement](LICENSE); a license key is required beyond any trial period.
 
 Bundles **Archivo** and **Martian Mono** under the SIL Open Font License 1.1 (`assets/fonts/OFL-*.txt`), instanced from [google/fonts](https://github.com/google/fonts). Built with [egui](https://github.com/emilk/egui), [wgpu](https://github.com/gfx-rs/wgpu), [image](https://github.com/image-rs/image), [zune-jpeg](https://github.com/etemesi254/zune-image), [jxl-oxide](https://github.com/tirr-c/jxl-oxide) and [rayon](https://github.com/rayon-rs/rayon).
