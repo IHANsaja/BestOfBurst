@@ -131,6 +131,10 @@ pub struct Review {
     /// Close-call groups the user has settled.
     pub settled: HashSet<u64>,
     pub pending_treats: u32,
+    /// Also write the keepers' file names to keepers.txt and keepers.csv on delivery.
+    pub list_names: bool,
+    /// The file ending for that list (empty: each photo's own).
+    pub list_ending: String,
 }
 
 pub fn file_name(p: &str) -> &str {
@@ -162,6 +166,7 @@ pub fn reason_words(r: &str) -> &'static str {
         "too_dark" => "Too dark",
         "too_bright" => "Too bright",
         "low_contrast" => "Flat, low contrast",
+        "eyes_closed" => "Blink: eyes closed",
         "unreadable" => "Couldn't open this file",
         _ => "Your choice",
     }
@@ -228,6 +233,8 @@ impl Review {
             mark_anim: HashMap::new(),
             settled: HashSet::new(),
             pending_treats: 0,
+            list_names: false,
+            list_ending: String::new(),
         };
         r.rebuild_groups();
         r.rebuild_items();
@@ -549,6 +556,34 @@ impl Review {
         self.mark_dirty();
     }
 
+    /// Select a photo and bring it into view on the contact sheet.
+    pub fn reveal(&mut self, idx: usize) {
+        self.stacked = false;
+        self.close_only = false;
+        self.rebuild_items();
+        self.selected = Some(idx);
+        self.scroll_to = self.items.iter().position(|it| it.idx == idx);
+    }
+
+    /// What the closed-eyes check saw on this photo, in words; `None` when it has nothing to say.
+    pub fn eyes_line(&self, idx: usize) -> Option<String> {
+        let e = &self.ranking.entries[idx];
+        let faces = e.main_faces().count();
+        if faces == 0 {
+            return None;
+        }
+        let who = |n: u8| if faces == 1 { "eyes".to_string() } else { format!("{n} of {faces} people's eyes") };
+        Some(if e.blinks > 0 && e.reasons.iter().any(|r| r == "eyes_closed") {
+            format!("Blink: {} closed here, open in a better frame of this moment", who(e.blinks))
+        } else if e.blinks > 0 {
+            format!("Blink: {} closed, and no frame of this moment is cleaner", who(e.blinks))
+        } else if e.eyes_posed > 0 {
+            format!("Eyes closed on purpose ({}): kept shut through the burst or by everyone together", who(e.eyes_posed))
+        } else {
+            format!("{}: eyes open", theme::plural(faces, "face"))
+        })
+    }
+
     pub fn abs_path(&self, idx: usize) -> PathBuf {
         self.input.join(&self.ranking.entries[idx].path)
     }
@@ -598,11 +633,18 @@ impl Review {
         let mut state = self.state.clone();
         let entries = self.ranking.entries.clone();
         let (input, out, opts) = (self.input.clone(), self.out.clone(), self.write_opts);
+        let list = self.list_names.then(|| self.list_ending.clone());
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let r = (|| -> anyhow::Result<output::OutputSummary> {
                 let s = output::write_folders(&input, &out, &entries, opts)?;
                 output::write_report(&out, &state, &entries)?;
+                if let Some(ending) = list {
+                    let mut picks: Vec<&Entry> = entries.iter().filter(|e| e.effective() == Status::Pick).collect();
+                    picks.sort_by_key(|e| e.rank.unwrap_or(usize::MAX));
+                    let names: Vec<String> = picks.iter().map(|e| e.path.clone()).collect();
+                    output::write_name_lists(&out, "keepers", &names, &ending)?;
+                }
                 state.save(&out)?;
                 Ok(s)
             })();
@@ -761,6 +803,7 @@ fn sheet(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
                     Key::Z => rv.undo(),
                     Key::Y => rv.redo(),
                     Key::E => nav = Nav::To(Screen::Done),
+                    Key::O => nav = Nav::To(Screen::Find),
                     _ => {}
                 }
                 continue;
@@ -856,7 +899,6 @@ fn sheet(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
     if deliver {
         nav = Nav::To(Screen::Done);
     }
-
     if let Some(min) = app.break_due() {
         let mut action = theme::BannerAction::None;
         egui::Panel::top("break_banner").frame(egui::Frame::new()).show(ui, |ui| {
@@ -1124,6 +1166,16 @@ fn side_panel(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) ->
                     nav = Some(Nav::To(Screen::Focus));
                 }
             }
+            ui.add_space(2.0);
+            ui.scope(|ui| {
+                ui.visuals_mut().override_text_color = Some(p.on_surface);
+                if theme::button(ui, "Find originals", Some("Ctrl O"), Btn::MonoSmall, 40.0, Some(ui.available_width()), true)
+                    .on_hover_text("A client sent back previews? Match them to their originals in this shoot.")
+                    .clicked()
+                {
+                    nav = Some(Nav::To(Screen::Find));
+                }
+            });
             app::message_line(app, ui, p);
             ui.add_space(18.0);
             theme::rule(ui, p.rule, 1.5);
@@ -1241,6 +1293,10 @@ fn detail(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) -> Opt
     if !e.reasons.is_empty() {
         ui.add_space(6.0);
         ui.label(theme::body(format!("Set aside: {}", e.reasons.iter().map(|r| reason_words(r)).collect::<Vec<_>>().join(", ")), 13.0, p.mark));
+    }
+    if let Some(line) = rv.eyes_line(idx) {
+        ui.add_space(4.0);
+        ui.label(theme::body(line, 13.0, if e.blinks > 0 { p.mark } else { p.muted }));
     }
     if let Some(f) = rv.state.files.get(&e.path) {
         if let Some(err) = &f.error {

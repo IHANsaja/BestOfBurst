@@ -48,7 +48,7 @@ fn split_name(name: &str) -> (&str, &str) {
 }
 
 /// `name`, then `name_1`, `name_2`, ... until unused in this folder (case-insensitive).
-fn unique_name(used: &mut HashSet<String>, name: &str) -> String {
+pub fn unique_name(used: &mut HashSet<String>, name: &str) -> String {
     let (stem, ext) = split_name(name);
     let mut candidate = name.to_string();
     let mut k = 1;
@@ -60,7 +60,7 @@ fn unique_name(used: &mut HashSet<String>, name: &str) -> String {
     candidate
 }
 
-fn file_name(rel: &str) -> String {
+pub fn file_name(rel: &str) -> String {
     rel.rsplit(['\\', '/']).next().unwrap_or(rel).to_string()
 }
 
@@ -155,6 +155,45 @@ pub fn write_folders(input: &Path, out: &Path, entries: &[Entry], opts: OutputOp
     Ok(summary)
 }
 
+/// A file name with the ending the user asked for: empty keeps it, `none` (or `-`) drops it,
+/// anything else replaces it (`nef` and `.NEF` both work).
+pub fn with_ending(name: &str, ending: &str) -> String {
+    let e = ending.trim();
+    if e.is_empty() {
+        return name.to_string();
+    }
+    let (stem, _) = split_name(name);
+    if e.eq_ignore_ascii_case("none") || e == "-" {
+        stem.to_string()
+    } else {
+        format!("{stem}.{}", e.trim_start_matches('.'))
+    }
+}
+
+/// Write the chosen photos' file names to `<base>.txt` (one per line) and `<base>.csv`
+/// (a `file` column), each name once, with the ending from [`with_ending`].
+pub fn write_name_lists(dir: &Path, base: &str, paths: &[String], ending: &str) -> Result<(PathBuf, PathBuf)> {
+    std::fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
+    let mut seen = HashSet::new();
+    let names: Vec<String> = paths
+        .iter()
+        .map(|p| with_ending(&file_name(p), ending))
+        .filter(|n| seen.insert(n.to_lowercase()))
+        .collect();
+    let txt = dir.join(format!("{base}.txt"));
+    let csv_path = dir.join(format!("{base}.csv"));
+    let mut text = names.join("\r\n");
+    text.push_str("\r\n");
+    std::fs::write(&txt, text).with_context(|| format!("cannot write {}", txt.display()))?;
+    let mut w = csv::Writer::from_path(&csv_path).with_context(|| format!("cannot write {}", csv_path.display()))?;
+    w.write_record(["file"])?;
+    for n in &names {
+        w.write_record([n])?;
+    }
+    w.flush()?;
+    Ok((txt, csv_path))
+}
+
 fn r3(v: f32) -> String {
     let s = format!("{v:.3}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
@@ -170,7 +209,7 @@ pub fn write_report(out: &Path, state: &State, entries: &[Entry]) -> Result<()> 
         w.write_record([
             "rank", "status", "score", "file", "reasons", "group", "group_size", "sharpness", "tenengrad",
             "mean_luma", "clip_highlights", "clip_shadows", "contrast", "noise", "colorfulness", "capture_time",
-            "format", "decoder", "error",
+            "format", "decoder", "error", "faces", "blinks", "eyes_closed_on_purpose",
         ])?;
         let bucket = |e: &Entry| match e.effective() {
             Status::Pick => 0,
@@ -211,6 +250,9 @@ pub fn write_report(out: &Path, state: &State, entries: &[Entry]) -> Result<()> 
                 f.map(|f| f.format.clone()).unwrap_or_default(),
                 f.and_then(|f| f.decoder.clone()).unwrap_or_default(),
                 f.and_then(|f| f.error.clone()).unwrap_or_default(),
+                f.and_then(|f| f.faces.as_ref()).map(|v| v.len().to_string()).unwrap_or_default(),
+                if e.faces.is_empty() { String::new() } else { e.blinks.to_string() },
+                if e.faces.is_empty() { String::new() } else { e.eyes_posed.to_string() },
             ])?;
         }
         w.flush()?;

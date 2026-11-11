@@ -1,17 +1,20 @@
 //! The egui window in the Grease Pencil design (DESIGN.md): Home, Processing, Review, Focus,
-//! Compare, the full-screen Viewer, Done and Glim's corner, over the same engine as the CLI.
+//! Compare, the full-screen Viewer, Done, Find originals and Glim's corner, over the same engine as the CLI.
 
 pub mod app;
 pub mod compare;
 pub mod corner;
 pub mod done;
+pub mod find;
 pub mod focus;
 pub mod glim;
 pub mod help;
 pub mod home;
 pub mod marks;
 pub mod progress;
+pub mod remover;
 pub mod review;
+pub mod start;
 pub mod textures;
 pub mod theme;
 pub mod viewer;

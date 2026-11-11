@@ -237,6 +237,40 @@ pub fn resize_long_edge(img: RgbImage, edge: u32) -> Result<RgbImage> {
     RgbImage::new(nw, nh, dst.into_vec())
 }
 
+/// A downscaled copy (long edge at most `edge`, bilinear) that leaves the original untouched.
+pub fn resize_ref(img: &RgbImage, edge: u32) -> Result<RgbImage> {
+    if img.width.max(img.height) <= edge {
+        return Ok(img.clone());
+    }
+    let (nw, nh) = target_dims(img.width, img.height, edge);
+    let n = img.width as usize * img.height as usize * 3;
+    let src = fr::images::ImageRef::new(img.width, img.height, &img.rgb[..n], fr::PixelType::U8x3)
+        .map_err(|e| anyhow!("resize: {e:?}"))?;
+    let mut dst = fr::images::Image::new(nw, nh, fr::PixelType::U8x3);
+    let mut resizer = fr::Resizer::new();
+    let opts = fr::ResizeOptions::new().resize_alg(fr::ResizeAlg::Convolution(fr::FilterType::Bilinear));
+    resizer
+        .resize(&src, &mut dst, &opts)
+        .map_err(|e| anyhow!("resize: {e:?}"))?;
+    RgbImage::new(nw, nh, dst.into_vec())
+}
+
+/// Resize to exactly `w` x `h` (Catmull-Rom), whatever that does to the proportions.
+pub fn resize_exact(img: RgbImage, w: u32, h: u32) -> Result<RgbImage> {
+    if img.width == w && img.height == h {
+        return Ok(img);
+    }
+    let src = fr::images::Image::from_vec_u8(img.width, img.height, img.rgb, fr::PixelType::U8x3)
+        .map_err(|e| anyhow!("resize: {e:?}"))?;
+    let mut dst = fr::images::Image::new(w.max(1), h.max(1), fr::PixelType::U8x3);
+    let mut resizer = fr::Resizer::new();
+    let opts = fr::ResizeOptions::new().resize_alg(fr::ResizeAlg::Convolution(fr::FilterType::CatmullRom));
+    resizer
+        .resize(&src, &mut dst, &opts)
+        .map_err(|e| anyhow!("resize: {e:?}"))?;
+    RgbImage::new(w.max(1), h.max(1), dst.into_vec())
+}
+
 /// Decode and shrink to the 2,048 px analysis size.
 pub fn decode_for_analysis(path: &Path, format: Format) -> Result<Decoded> {
     let d = decode_full(path, format)?;

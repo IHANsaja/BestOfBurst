@@ -92,6 +92,10 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         theme::checklist_row(ui, &mut o.rejects, false, "Set-aside folder", "Out-of-focus, too dark or too bright photos, sorted by reason.", None);
         theme::checklist_row(ui, &mut o.copy, false, "Make full copies", "Normally the folders hold shortcuts that look and open like the real photos but take no extra disk space. Turn this on if you'll edit the photos in those folders, so your originals stay untouched.", None);
         theme::checklist_row(ui, &mut o.keep_names, false, "Keep original file names", "Don't number the picks.", None);
+        theme::checklist_row(ui, &mut rv.list_names, false, "List of file names", "The keepers' names in keepers.txt and keepers.csv, to paste into Lightroom's search or send on.", None);
+        if rv.list_names {
+            theme::ending_field(ui, &mut rv.list_ending);
+        }
         let mut report = true;
         theme::checklist_row(ui, &mut report, true, "Spreadsheet of results", "Every photo with its quality and decision (report.csv, opens in Excel).", None);
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {

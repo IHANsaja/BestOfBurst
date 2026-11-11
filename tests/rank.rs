@@ -228,6 +228,7 @@ fn fake_state(dir: &std::path::Path) -> State {
                 error: None,
                 thumb: Some(format!("thumbs\\{k}.jpg")),
                 tiles: Some(vec![12.5; 64]),
+                faces: None,
             },
         );
     }
@@ -245,6 +246,7 @@ fn fake_state(dir: &std::path::Path) -> State {
             error: Some("No Windows codec for this format.".into()),
             thumb: None,
             tiles: None,
+            faces: None,
         },
     );
     s
@@ -392,4 +394,114 @@ fn out_equal_to_input_is_refused() {
     cfg.out = dir.clone();
     let stop = Arc::new(AtomicBool::new(false));
     assert!(engine::analyze_folder(&cfg, &stop, |_| {}).is_err());
+}
+
+// ---- Closed eyes: blink or on purpose ----
+
+use bestofburst::faces::Face;
+
+fn face(x: f32, open: f32) -> Face {
+    Face { x, y: 0.4, size: 0.2, left: open, right: open }
+}
+
+/// A burst (same hash, 300 ms apart) with the given faces per frame, ranked for one keeper.
+fn eye_burst(frames: &[Vec<Face>]) -> Vec<Entry> {
+    let mut e: Vec<Entry> = frames
+        .iter()
+        .enumerate()
+        .map(|(k, faces)| {
+            // The first frame is the sharpest, so it wins unless the eyes say otherwise.
+            let mut x = entry(&format!("f{k}.jpg"), 400.0 - k as f32 * 10.0, A, 1_000 + k as i64 * 300);
+            x.faces = faces.clone();
+            x
+        })
+        .collect();
+    let w = Preset::General.weights();
+    rank::group_entries(&mut e);
+    rank::apply_rejects(&mut e);
+    rank::eye_check(&mut e);
+    rank::score_entries(&mut e, &w);
+    rank::group_scores(&mut e, &w);
+    rank::select(&mut e, 1, 1);
+    e
+}
+
+#[test]
+fn eye_states() {
+    use rank::EyeState::*;
+    assert_eq!(rank::eye_state(&face(0.5, 0.30)), Open);
+    assert_eq!(rank::eye_state(&face(0.5, 0.08)), Closed);
+    assert_eq!(rank::eye_state(&Face { left: 0.07, right: 0.29, ..face(0.5, 0.0) }), Wink);
+    assert_eq!(rank::eye_state(&Face { left: -1.0, right: 0.09, ..face(0.5, 0.0) }), Closed, "profile: the visible eye decides");
+    assert_eq!(rank::eye_state(&Face { left: -1.0, right: -1.0, ..face(0.5, 0.0) }), Unknown);
+    assert_eq!(rank::eye_state(&face(0.5, 0.18)), Open, "narrow eyes are not shut");
+}
+
+#[test]
+fn a_blink_in_one_frame_is_set_aside() {
+    let e = eye_burst(&[vec![face(0.5, 0.07)], vec![face(0.5, 0.30)], vec![face(0.51, 0.31)]]);
+    assert_eq!(e[0].blinks, 1);
+    assert_eq!(e[0].reasons, ["eyes_closed"]);
+    assert_eq!(e[0].status, Status::Reject);
+    assert_eq!(e[1].status, Status::Pick, "the sharpest frame with open eyes");
+    assert!(e[1].reasons.is_empty() && e[2].reasons.is_empty());
+}
+
+#[test]
+fn eyes_held_shut_through_the_burst_are_a_pose() {
+    let e = eye_burst(&[vec![face(0.5, 0.06)], vec![face(0.5, 0.08)], vec![face(0.5, 0.07)]]);
+    assert!(e.iter().all(|x| x.blinks == 0 && x.eyes_posed == 1 && x.reasons.is_empty()));
+    assert_eq!(e[0].status, Status::Pick);
+    assert_eq!(e[0].eye_penalty, 1.0);
+}
+
+#[test]
+fn one_person_blinking_in_a_group_is_a_blink() {
+    // Three people; the middle one blinks in the first frame only.
+    let open = |b: f32| vec![face(0.2, 0.3), face(0.5, b), face(0.8, 0.29)];
+    let e = eye_burst(&[open(0.06), open(0.3)]);
+    assert_eq!((e[0].blinks, e[0].eyes_posed), (1, 0));
+    assert_eq!(e[0].status, Status::Reject);
+    assert_eq!(e[1].status, Status::Pick);
+    // The same single frame with nothing to compare against: still a blink, kept at a lower score.
+    let alone = eye_burst(&[open(0.06)]);
+    assert_eq!(alone[0].blinks, 1);
+    assert!(alone[0].reasons.is_empty(), "no cleaner frame of the moment exists");
+    assert!(alone[0].eye_penalty < 1.0);
+    assert_eq!(alone[0].status, Status::Pick);
+}
+
+#[test]
+fn several_people_with_eyes_shut_together_are_a_pose() {
+    // A kiss: both shut in one frame only.
+    let e = eye_burst(&[vec![face(0.4, 0.05), face(0.6, 0.07)], vec![face(0.4, 0.3), face(0.6, 0.3)]]);
+    assert_eq!((e[0].blinks, e[0].eyes_posed), (0, 2));
+    assert!(e[0].reasons.is_empty());
+    assert_eq!(e[0].status, Status::Pick);
+    // Two of five is not "together".
+    let five = |a: f32, b: f32| vec![face(0.1, a), face(0.3, b), face(0.5, 0.3), face(0.7, 0.3), face(0.9, 0.3)];
+    let e = eye_burst(&[five(0.05, 0.06), five(0.3, 0.3)]);
+    assert_eq!(e[0].blinks, 2);
+    assert_eq!(e[0].status, Status::Reject);
+}
+
+#[test]
+fn the_frame_with_the_fewest_blinks_stays() {
+    // Every frame has a blink; the second has one, the others two.
+    let g = |a: f32, b: f32, c: f32| vec![face(0.1, a), face(0.3, b), face(0.5, c), face(0.7, 0.3), face(0.9, 0.3)];
+    let e = eye_burst(&[g(0.05, 0.05, 0.3), g(0.3, 0.3, 0.05), g(0.05, 0.3, 0.05)]);
+    assert_eq!(e.iter().map(|x| x.blinks).collect::<Vec<_>>(), [2, 1, 2]);
+    assert_eq!(e[1].status, Status::Pick);
+    assert!(e[1].reasons.is_empty() && e[1].eye_penalty < 1.0);
+    assert_eq!(e[0].reasons, ["eyes_closed"]);
+    assert_eq!(e[2].reasons, ["eyes_closed"]);
+}
+
+#[test]
+fn winks_bystanders_and_photos_without_faces_change_nothing() {
+    let wink = Face { left: 0.06, right: 0.3, ..face(0.5, 0.0) };
+    let bystander = Face { size: 0.05, ..face(0.9, 0.05) };
+    let e = eye_burst(&[vec![wink, bystander], vec![face(0.5, 0.3)], vec![]]);
+    assert!(e.iter().all(|x| x.blinks == 0 && x.eyes_posed == 0 && x.reasons.is_empty()));
+    assert_eq!(e[0].status, Status::Pick);
 }

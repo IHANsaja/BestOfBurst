@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use super::review::Review;
 use super::textures::Textures;
 use super::theme::{self, Pal};
-use super::{compare, corner, done, focus, help, home, marks, progress, review, viewer};
+use super::{compare, corner, done, find, focus, help, home, marks, progress, remover, review, start, viewer};
 use crate::engine::EngineChoice;
 use crate::sysmon::{self, Monitor, Snapshot};
 use crate::engine::{self, Event, RunConfig};
@@ -29,6 +29,10 @@ pub const HEADER_H: f32 = 56.0;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Screen {
+    /// The first page: choose the best shots, or remove watermarks.
+    Start,
+    /// Remove watermarks, on its own.
+    Remover,
     Home,
     Progress,
     Review,
@@ -36,6 +40,7 @@ pub enum Screen {
     Compare,
     Viewer,
     Done,
+    Find,
     Corner,
     Help,
 }
@@ -57,6 +62,9 @@ pub enum BgMsg {
     FolderInfo { folder: PathBuf, info: FolderInfo },
     StateLoaded(Result<Box<State>, String>),
     Written(Result<OutputSummary, String>),
+    Found { report: crate::find::FindReport, index: Arc<crate::find::Index> },
+    FoundWritten(Result<crate::find::FoundSummary, String>),
+    Cleaned(Result<crate::clean::CleanSummary, String>),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -65,6 +73,8 @@ pub struct FolderInfo {
     pub analyzed: usize,
     pub failed: usize,
     pub new: usize,
+    /// Checked photos that have not had the closed-eyes check yet.
+    pub eyes_due: usize,
     pub has_rank: bool,
     pub error: Option<String>,
 }
@@ -96,6 +106,8 @@ pub struct ProgressInfo {
 pub struct Settings {
     pub night: bool,
     pub engine: EngineChoice,
+    /// Find faces and set aside blinks.
+    pub eyes: bool,
     pub treats: u32,
     pub joy: f32,
     pub energy: f32,
@@ -105,7 +117,7 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { night: false, engine: EngineChoice::Auto, treats: 0, joy: 60.0, energy: 70.0, settled: 0, sharp_eye_best: 0 }
+        Settings { night: false, engine: EngineChoice::Auto, eyes: true, treats: 0, joy: 60.0, energy: 70.0, settled: 0, sharp_eye_best: 0 }
     }
 }
 
@@ -163,6 +175,8 @@ pub struct BestOfBurstApp {
     pub monitor: Monitor,
     /// Whether the window was last told to fill the monitor (the viewer and full-screen compare).
     fullscreen: bool,
+    pub find: find::FindState,
+    pub remover: remover::RemoverState,
 }
 
 /// Writes `state.json` on its own thread, always the newest snapshot.
@@ -229,7 +243,12 @@ impl BestOfBurstApp {
             help_return: Screen::Home,
             monitor: Monitor::start(),
             fullscreen: false,
+            find: find::FindState::default(),
+            remover: remover::RemoverState::default(),
         };
+        if folder.is_none() {
+            app.screen = Screen::Start;
+        }
         // Start the graphics card in the background so Home can show it without waiting.
         std::thread::spawn(|| {
             let _ = crate::gpu::get();
@@ -293,14 +312,16 @@ impl BestOfBurstApp {
         if self.folder.as_ref() != Some(&folder) {
             self.textures.clear();
             self.review = None;
+            self.find = find::FindState::default();
         }
         self.folder = Some(folder.clone());
         self.folder_info = None;
         self.checking_folder = true;
         let tx = self.bg_tx.clone();
         let ctx = ctx.clone();
+        let eyes = self.settings.eyes;
         std::thread::spawn(move || {
-            let info = folder_info(&folder);
+            let info = folder_info(&folder, eyes);
             let _ = tx.send(BgMsg::FolderInfo { folder, info });
             ctx.request_repaint();
         });
@@ -319,6 +340,9 @@ impl BestOfBurstApp {
         cfg.threads = self.threads;
         cfg.retry_failed = self.retry_failed;
         cfg.engine = self.settings.engine;
+        cfg.eyes = self.settings.eyes;
+        // The shoot's photos are about to change under the find index.
+        self.find = find::FindState::default();
         self.stop = Arc::new(AtomicBool::new(false));
         self.prog = ProgressInfo { scanning: true, started: Some(Instant::now()), ..Default::default() };
         self.finished_state = None;
@@ -504,6 +528,75 @@ impl BestOfBurstApp {
                     Err(e) => self.flash(e, true),
                 }
             }
+            BgMsg::Found { report, index } => self.find.on_found(report, index),
+            BgMsg::FoundWritten(r) => {
+                self.find.writing = false;
+                match r {
+                    Ok(s) => {
+                        let mut text = format!("Done: {} are in {}", theme::plural(s.written, "original"), s.dir.display());
+                        if s.copied_fallback {
+                            text.push_str(" (full copies, since shortcuts aren't possible on this drive)");
+                        }
+                        if !s.errors.is_empty() {
+                            text.push_str(&format!(", {} couldn't be added", s.errors.len()));
+                        }
+                        for n in &s.notes {
+                            text.push_str(". ");
+                            text.push_str(n);
+                        }
+                        self.flash(text, !s.errors.is_empty());
+                        self.find.delivered = Some(s);
+                    }
+                    Err(e) => self.flash(e, true),
+                }
+            }
+            BgMsg::Cleaned(r) => {
+                self.remover.running = false;
+                match r {
+                    Ok(s) => {
+                        let text = if s.written == 0 {
+                            "No watermark could be removed: none of these photos has a sure original in that folder.".to_string()
+                        } else {
+                            format!("Done: {} without the watermark are in {}", theme::plural(s.written, "photo"), s.dir.display())
+                        };
+                        self.flash(text, s.written == 0);
+                        self.remover.result = Some(s);
+                    }
+                    Err(e) => self.flash(e, true),
+                }
+            }
+        }
+    }
+
+    /// The last message as a toast: a dark card at the bottom of the window, safelight edge for
+    /// a problem. Click it to dismiss.
+    fn toast(&mut self, ctx: &egui::Context) {
+        let Some((text, err, at)) = self.message.clone() else { return };
+        let age = at.elapsed().as_secs_f32();
+        // Slide up as it appears.
+        let rise = if self.reduced_motion { 0.0 } else { (1.0 - (age / 0.18).min(1.0)) * 16.0 };
+        #[allow(deprecated)]
+        let id = egui::Id::new("bob_toast");
+        let shown = egui::Area::new(id).order(egui::Order::Foreground).anchor(Align2::CENTER_BOTTOM, vec2(0.0, -26.0 + rise)).show(ctx, |ui| {
+            let edge = if err { theme::SAFELIGHT } else { theme::TABLE };
+            let frame = egui::Frame::new()
+                .fill(theme::INK)
+                .stroke(egui::Stroke::new(1.5, theme::RULE_STRONG))
+                .inner_margin(egui::Margin { left: 22, right: 18, top: 12, bottom: 12 });
+            let r = frame
+                .show(ui, |ui| {
+                    ui.set_max_width(620.0);
+                    ui.label(theme::mono(if err { "Needs a look" } else { "Done" }, 10.5, if err { theme::SAFELIGHT_SOFT } else { theme::EDGE }));
+                    ui.label(theme::body(&text, 14.5, theme::TABLE));
+                })
+                .response
+                .rect;
+            ui.painter().rect_filled(Rect::from_min_size(r.min, vec2(4.0, r.height())), 0.0, edge);
+            ui.interact(r, id.with("click"), Sense::click()).on_hover_text("Click to dismiss")
+        });
+        shown.inner.widget_info(|| WidgetInfo::labeled(Role::Status, true, &text));
+        if shown.inner.clicked() {
+            self.message = None;
         }
     }
 
@@ -515,7 +608,7 @@ impl BestOfBurstApp {
 }
 
 /// Count photos and how many are already analyzed (runs on a background thread).
-fn folder_info(folder: &Path) -> FolderInfo {
+fn folder_info(folder: &Path, eyes: bool) -> FolderInfo {
     let out = scan::default_out(folder);
     if !folder.is_dir() {
         return FolderInfo { error: Some("Folder not found.".into()), ..Default::default() };
@@ -532,6 +625,9 @@ fn folder_info(folder: &Path) -> FolderInfo {
             Some(s) if s.is_current(&i.rel, i.size, i.mtime_ms) => {
                 if s.files.get(&i.rel).map(|e| e.is_done()).unwrap_or(false) {
                     info.analyzed += 1;
+                    if eyes && s.lacks_eyes(&i.rel) {
+                        info.eyes_due += 1;
+                    }
                 } else {
                     info.failed += 1;
                 }
@@ -791,13 +887,9 @@ pub fn gpu_line(s: &Snapshot) -> (String, String) {
     }
 }
 
-/// Toast line for the last message, if any.
-pub fn message_line(app: &BestOfBurstApp, ui: &mut Ui, p: Pal) {
-    if let Some((msg, err, _)) = &app.message {
-        let c = if *err { p.mark } else { p.on_surface };
-        ui.label(theme::body(msg, 14.0, c));
-    }
-}
+/// Messages are shown as a toast over every screen (see `BestOfBurstApp::toast`); the places
+/// that used to print them inline keep calling this.
+pub fn message_line(_app: &BestOfBurstApp, _ui: &mut Ui, _p: Pal) {}
 
 pub fn center_text(ui: &Ui, rect: Rect, text: &str, p: Pal) {
     theme::text_at(ui, rect.center(), Align2::CENTER_CENTER, text, theme::f_mono(11.0), p.muted, 0.88);
@@ -845,7 +937,7 @@ impl eframe::App for BestOfBurstApp {
 
         // Done is always the light table; Processing and Focus are always the darkroom.
         let surface_night = match self.screen {
-            Screen::Done | Screen::Corner | Screen::Help => false,
+            Screen::Done | Screen::Find | Screen::Corner | Screen::Help | Screen::Start | Screen::Remover => false,
             Screen::Progress | Screen::Focus | Screen::Compare | Screen::Viewer => true,
             _ => self.settings.night,
         };
@@ -863,6 +955,8 @@ impl eframe::App for BestOfBurstApp {
         }
 
         match self.screen {
+            Screen::Start => start::show(self, ui),
+            Screen::Remover => remover::show(self, ui),
             Screen::Home => home::show(self, ui),
             Screen::Progress => progress::show(self, ui),
             Screen::Review => review::show(self, ui),
@@ -870,9 +964,11 @@ impl eframe::App for BestOfBurstApp {
             Screen::Compare => compare::show(self, ui),
             Screen::Viewer => viewer::show(self, ui),
             Screen::Done => done::show(self, ui),
+            Screen::Find => find::show(self, ui),
             Screen::Corner => corner::show(self, ui),
             Screen::Help => help::show(self, ui),
         }
+        self.toast(&ctx);
         resize_edges(&ctx);
         let asked = ctx.data_mut(|d| d.remove_temp::<bool>(help_flag()).unwrap_or(false));
         if asked || (!ctx.egui_wants_keyboard_input() && ctx.input(|i| i.key_pressed(egui::Key::F1))) {

@@ -5,6 +5,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use crate::analyze::{hamming, Metrics};
+use crate::faces::{Face, MAIN_FACE_SHARE};
 use crate::state::{GroupInfo, LastRank, RankResult, State};
 
 // Grouping constants (written into `last_rank`).
@@ -36,6 +37,61 @@ pub const SURE_GROUP_MIN: usize = 3;
 /// style, so outside it the credit eases off toward the too-dark / too-bright limits.
 pub const KEY_LOW: f32 = 0.18;
 pub const KEY_HIGH: f32 = 0.72;
+
+// Closed eyes. Eye openness is the eye aspect ratio from `faces` (lid gap over eye width).
+/// Under this an eye is shut.
+pub const EYE_CLOSED: f32 = 0.15;
+/// From this an eye is clearly open (one shut, one clearly open: a wink).
+pub const EYE_OPEN: f32 = 0.21;
+/// Eyes shut on at least this share of the burst's other frames are held shut on purpose.
+pub const HELD_SHARE: f32 = 0.6;
+/// A blink nothing can replace (no cleaner frame of the moment) costs this much of the score,
+/// per blinking face, up to two.
+pub const BLINK_PENALTY: f32 = 0.85;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EyeState {
+    Open,
+    Closed,
+    Wink,
+    /// Neither eye could be measured.
+    Unknown,
+}
+
+impl EyeState {
+    pub fn name(self) -> &'static str {
+        match self {
+            EyeState::Open => "open",
+            EyeState::Closed => "closed",
+            EyeState::Wink => "wink",
+            EyeState::Unknown => "unknown",
+        }
+    }
+}
+
+/// Open, shut or winking, from the two eye openness values (-1: that eye is hidden).
+pub fn eye_state(f: &Face) -> EyeState {
+    match (f.left >= 0.0, f.right >= 0.0) {
+        (false, false) => EyeState::Unknown,
+        (true, true) => {
+            let (lo, hi) = (f.left.min(f.right), f.left.max(f.right));
+            if hi < EYE_CLOSED {
+                EyeState::Closed
+            } else if lo < EYE_CLOSED && hi >= EYE_OPEN {
+                EyeState::Wink
+            } else {
+                EyeState::Open
+            }
+        }
+        (l, _) => {
+            if (if l { f.left } else { f.right }) < EYE_CLOSED {
+                EyeState::Closed
+            } else {
+                EyeState::Open
+            }
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Status {
@@ -174,6 +230,14 @@ pub struct Entry {
     pub override_status: Option<Status>,
     /// Rank among the effective picks (1..N).
     pub rank: Option<usize>,
+    /// Faces found by the closed-eyes check (empty: none, or the check did not run).
+    pub faces: Vec<Face>,
+    /// Main faces caught blinking (eyes shut by accident).
+    pub blinks: u8,
+    /// Main faces with eyes shut on purpose: held through the burst, or several people at once.
+    pub eyes_posed: u8,
+    /// Score multiplier for blinks that stay in the running.
+    pub eye_penalty: f32,
 }
 
 impl Entry {
@@ -195,7 +259,17 @@ impl Entry {
             status: Status::Maybe,
             override_status: None,
             rank: None,
+            faces: Vec::new(),
+            blinks: 0,
+            eyes_posed: 0,
+            eye_penalty: 1.0,
         }
+    }
+
+    /// The faces that matter: not much smaller than the largest one.
+    pub fn main_faces(&self) -> impl Iterator<Item = &Face> {
+        let largest = self.faces.iter().map(|f| f.size).fold(0.0, f32::max);
+        self.faces.iter().filter(move |f| f.size >= MAIN_FACE_SHARE * largest)
     }
 
     pub fn failed(path: &str) -> Self {
@@ -227,13 +301,15 @@ pub fn entries_from_state(state: &State) -> Vec<Entry> {
                         tiles[k] = *v;
                     }
                 }
-                Entry::new(
+                let mut e = Entry::new(
                     path,
                     m.clone(),
                     tiles,
                     f.dhash_u64().unwrap_or(0),
                     f.capture_ms.unwrap_or(f.mtime_ms),
-                )
+                );
+                e.faces = f.faces.clone().unwrap_or_default();
+                e
             }
             _ => Entry::failed(path),
         })
@@ -348,6 +424,82 @@ pub fn apply_rejects(e: &mut [Entry]) {
     }
 }
 
+/// The same face in another frame of the burst: the nearest one, if it has barely moved.
+fn same_face<'a>(f: &Face, other: &'a Entry) -> Option<&'a Face> {
+    let d = |o: &Face| ((o.x - f.x).powi(2) + (o.y - f.y).powi(2)).sqrt();
+    other
+        .faces
+        .iter()
+        .min_by(|a, b| d(a).total_cmp(&d(b)))
+        .filter(|o| d(o) <= f.size.max(o.size).max(0.05) && o.size >= 0.5 * f.size && f.size >= 0.5 * o.size)
+}
+
+/// Step 2b: closed eyes. Shut eyes are a pose when the person keeps them shut through the
+/// burst, or when most of the people in the photo have them shut together (a prayer, a kiss, a
+/// laugh). Shut on one person, in one frame, while the rest of the burst or the rest of the
+/// group has them open, is a blink. A blink is set aside when the moment has a frame with fewer
+/// blinks; when it has none, the frame stays in the running at a lower score.
+pub fn eye_check(e: &mut [Entry]) {
+    let mut by_group: BTreeMap<u64, Vec<usize>> = BTreeMap::new();
+    for (i, x) in e.iter_mut().enumerate() {
+        x.blinks = 0;
+        x.eyes_posed = 0;
+        x.eye_penalty = 1.0;
+        if x.ok {
+            by_group.entry(x.group).or_default().push(i);
+        }
+    }
+    for members in by_group.values() {
+        let mut found: Vec<(usize, u8, u8)> = Vec::new();
+        for &i in members {
+            let main: Vec<&Face> = e[i].main_faces().collect();
+            let shut: Vec<&Face> = main.iter().copied().filter(|f| eye_state(f) == EyeState::Closed).collect();
+            if shut.is_empty() {
+                continue;
+            }
+            let together = shut.len() >= 2 && shut.len() * 2 > main.len();
+            let (mut blinks, mut posed) = (0u8, 0u8);
+            for f in shut {
+                let (mut seen, mut shut_there) = (0usize, 0usize);
+                for &j in members.iter().filter(|&&j| j != i) {
+                    if let Some(o) = same_face(f, &e[j]) {
+                        match eye_state(o) {
+                            EyeState::Closed => {
+                                seen += 1;
+                                shut_there += 1;
+                            }
+                            EyeState::Open | EyeState::Wink => seen += 1,
+                            EyeState::Unknown => {}
+                        }
+                    }
+                }
+                let held = seen > 0 && shut_there as f32 >= HELD_SHARE * seen as f32;
+                if held || together {
+                    posed = posed.saturating_add(1);
+                } else {
+                    blinks = blinks.saturating_add(1);
+                }
+            }
+            found.push((i, blinks, posed));
+        }
+        for &(i, blinks, posed) in &found {
+            e[i].blinks = blinks;
+            e[i].eyes_posed = posed;
+        }
+        // The cleanest usable frame of the moment sets the bar.
+        let Some(least) = members.iter().filter(|&&i| e[i].reasons.is_empty()).map(|&i| e[i].blinks).min() else {
+            continue;
+        };
+        for &i in members {
+            if e[i].blinks > least {
+                e[i].reasons.push("eyes_closed".into());
+            } else if e[i].blinks > 0 {
+                e[i].eye_penalty = BLINK_PENALTY.powi(e[i].blinks.min(2) as i32);
+            }
+        }
+    }
+}
+
 /// Exposure 0..1. A low-key evening portrait or a bright window silhouette is not a fault: the
 /// mood alone never costs more than half, and deep shadows cost half as much as before. Blown
 /// highlights still cost the most.
@@ -419,7 +571,7 @@ pub fn score_entries(e: &mut [Entry], weights: &[f32; 5]) {
             continue;
         }
         x.components = [p_sharp[i], exposure(&x.metrics), p_con[i], 1.0 - p_noise[i], p_col[i]];
-        x.score = weighted(&x.components, weights);
+        x.score = weighted(&x.components, weights) * x.eye_penalty;
         x.group_score = x.score;
     }
 }
@@ -494,7 +646,7 @@ pub fn group_scores(e: &mut [Entry], weights: &[f32; 5]) -> BTreeMap<u64, [f32; 
             for (k, &i) in eligible.iter().enumerate() {
                 let mut c = e[i].components;
                 c[0] = ss[k];
-                e[i].group_score = weighted(&c, weights);
+                e[i].group_score = weighted(&c, weights) * e[i].eye_penalty;
             }
             let mut gs: Vec<f32> = eligible.iter().map(|&i| e[i].group_score).collect();
             gs.sort_by(|a, b| b.total_cmp(a));
@@ -638,6 +790,7 @@ pub fn rank(state: &State, preset: Preset, keep: Keep, max_per_group: usize) -> 
     let w = preset.weights();
     group_entries(&mut e);
     apply_rejects(&mut e);
+    eye_check(&mut e);
     score_entries(&mut e, &w);
     let centers = group_scores(&mut e, &w);
     select(&mut e, target, max_per_group);

@@ -44,6 +44,54 @@ enum Cmd {
     Ui { folder: Option<PathBuf> },
     /// Format, decoder, metrics and timing for one file.
     Probe { file: PathBuf },
+    /// Find the originals of photos someone sent back (watermarked previews, re-saved copies).
+    Find(FindArgs),
+    /// Remove the watermark from previews, using the originals they were made from.
+    Clean {
+        /// The folder with the originals.
+        originals: PathBuf,
+        /// The watermarked photos: files and/or folders.
+        #[arg(required = true)]
+        sent: Vec<PathBuf>,
+        /// Where the cleaned photos go [default: a `watermark removed` folder beside the first sent photo].
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Remove a watermark without the originals: the mark is learned from the watermarked
+    /// photos themselves (give at least 3 different photos carrying the same mark).
+    Unmark {
+        /// The watermarked photos: files and/or folders.
+        #[arg(required = true)]
+        sent: Vec<PathBuf>,
+        /// Where the cleaned photos go [default: a `watermark removed` folder beside the first photo].
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+}
+
+#[derive(Args)]
+struct FindArgs {
+    /// The shoot folder (already culled with `run`).
+    folder: PathBuf,
+    /// The photos that were sent: files and/or folders.
+    #[arg(required = true)]
+    sent: Vec<PathBuf>,
+    /// Output and state folder [default: <FOLDER>\_bestofburst].
+    #[arg(long)]
+    out: Option<PathBuf>,
+    /// Copy the originals instead of hard-linking them.
+    #[arg(long)]
+    copy: bool,
+    /// Only list the matches; do not fill the `found originals` folder.
+    #[arg(long)]
+    list: bool,
+    /// Also remove the watermark from the sent previews (into `clean previews`).
+    #[arg(long)]
+    clean: bool,
+    /// Also write the originals' names to `client selection.txt` and `.csv`, with this file
+    /// ending (`same` keeps each photo's own, `none` leaves it off, or e.g. `nef`).
+    #[arg(long, value_name = "ENDING")]
+    names: Option<String>,
 }
 
 #[derive(Args, Clone)]
@@ -91,6 +139,9 @@ struct RunArgs {
     /// Analysis hardware: auto (GPU when one works), gpu, or cpu.
     #[arg(long, default_value = "auto", value_parser = ["auto", "gpu", "cpu"])]
     engine: String,
+    /// Skip the closed-eyes check (faster; for shoots without people).
+    #[arg(long)]
+    no_eyes: bool,
 }
 
 #[derive(Args)]
@@ -130,6 +181,9 @@ fn main() -> ExitCode {
         Some(Cmd::Rank(a)) => cmd_rank(a),
         Some(Cmd::Status { folder, out }) => cmd_status(&folder, out),
         Some(Cmd::Probe { file }) => cmd_probe(&file),
+        Some(Cmd::Find(a)) => cmd_find(a),
+        Some(Cmd::Clean { originals, sent, out }) => cmd_clean(&originals, &sent, out),
+        Some(Cmd::Unmark { sent, out }) => cmd_unmark(&sent, out),
     };
     report(result)
 }
@@ -185,6 +239,7 @@ fn cmd_run(a: RunArgs) -> Result<()> {
         cfg.threads = t.max(1);
     }
     cfg.retry_failed = a.retry_failed;
+    cfg.eyes = !a.no_eyes;
     cfg.engine = engine::EngineChoice::parse(&a.engine).unwrap_or_default();
     let started = Instant::now();
 
@@ -323,6 +378,156 @@ fn cmd_rank(a: RankArgs) -> Result<()> {
     Ok(())
 }
 
+fn cmd_find(a: FindArgs) -> Result<()> {
+    use bestofburst::find::{self, Verdict};
+    let input = std::path::absolute(&a.folder).unwrap_or_else(|_| a.folder.clone());
+    let out = a.out.clone().unwrap_or_else(|| scan::default_out(&input));
+    let Some((state, warning)) = State::load_existing(&input, &out)? else {
+        bail!("No state.json in {}. Run `bestofburst run` on the shoot first.", out.display());
+    };
+    if let Some(w) = warning {
+        eprintln!("{w}");
+    }
+    let started = Instant::now();
+    let queries = find::collect_queries(&a.sent);
+    if queries.is_empty() {
+        bail!("No photos found in what was given.");
+    }
+    println!("Reading the shoot...");
+    let index = find::Index::build(&state, &out);
+    if index.is_empty() {
+        bail!("The shoot has no analyzed photos with thumbnails. Run `bestofburst run` first.");
+    }
+    println!("Matching {} sent photos against {} originals...", thousands(queries.len()), thousands(index.len()));
+    let stop = AtomicBool::new(false);
+    let report = find::find_originals(&index, &queries, None, &stop, |_, _| {});
+    for (shape, wm) in &report.watermarks {
+        println!(
+            "Watermark spotted on the {} previews (about {:.0}% of the frame, learned from {} matches); left out of the comparison.",
+            shape.name(),
+            wm.coverage * 100.0,
+            wm.learned_from
+        );
+    }
+    for m in &report.matches {
+        let sent = m.query.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        match m.verdict {
+            Verdict::Found | Verdict::Check => {
+                let b = m.best.as_ref();
+                let mut line = format!(
+                    "  {:<9} {sent}  ->  {}  ({:.0}% alike)",
+                    if m.verdict == Verdict::Found { "found" } else { "check" },
+                    m.originals().join(" + "),
+                    b.map(|b| b.similarity).unwrap_or(0.0)
+                );
+                if m.verdict == Verdict::Check {
+                    if let Some(r) = m.runner_up.as_ref().filter(|r| r.similarity >= find::CHECK_MIN) {
+                        line.push_str(&format!("   or {} ({:.0}%)", r.path, r.similarity));
+                    }
+                }
+                println!("{line}");
+            }
+            Verdict::NotFound => println!("  not found {sent}"),
+            Verdict::Failed => println!("  failed    {sent}: {}", m.error.clone().unwrap_or_default()),
+        }
+    }
+    println!(
+        "Found {}, to check {}, not in this shoot {}, couldn't open {}  ({})",
+        thousands(report.count(Verdict::Found)),
+        thousands(report.count(Verdict::Check)),
+        thousands(report.count(Verdict::NotFound)),
+        thousands(report.count(Verdict::Failed)),
+        elapsed(started.elapsed().as_secs())
+    );
+    if !a.list {
+        let s = find::write_found(&input, &out, &report.matches, a.copy)?;
+        if s.copied_fallback {
+            println!("Hard links not supported here; copying files.");
+        }
+        println!("  Originals: {}  -> {}", thousands(s.written), s.dir.display());
+        println!("  List:      {}", out.join("found.csv").display());
+        for e in s.errors.iter().take(5) {
+            eprintln!("  could not place {e}");
+        }
+    }
+    if let Some(ending) = &a.names {
+        let names: Vec<String> = report.matches.iter().flat_map(|m| m.originals()).map(|s| s.to_string()).collect();
+        let ending = if ending.eq_ignore_ascii_case("same") { "" } else { ending.as_str() };
+        let (txt, csv) = bestofburst::output::write_name_lists(&out, "client selection", &names, ending)?;
+        println!("  Names:     {} and {}", txt.display(), csv.display());
+    }
+    if a.clean {
+        let s = bestofburst::clean::clean_all(&input, &report.matches, &out.join(bestofburst::clean::CLEAN_DIR), &stop, |_, _| {})?;
+        println!("  Cleaned:   {}  -> {}", thousands(s.written), s.dir.display());
+        for (name, e) in s.errors.iter().take(5) {
+            eprintln!("  {name}: {e}");
+        }
+    }
+    Ok(())
+}
+
+fn cmd_clean(originals: &Path, sent: &[PathBuf], out: Option<PathBuf>) -> Result<()> {
+    use bestofburst::find;
+    let input = std::path::absolute(originals).unwrap_or_else(|_| originals.to_path_buf());
+    if !input.is_dir() {
+        bail!("{} is not a folder", input.display());
+    }
+    let queries = find::collect_queries(sent);
+    if queries.is_empty() {
+        bail!("No photos found in what was given.");
+    }
+    let started = Instant::now();
+    let stop = AtomicBool::new(false);
+    println!("Reading the originals...");
+    let index = find::Index::open(&input, &stop, |_, _| {});
+    if index.is_empty() {
+        bail!("No photos could be opened in {}.", input.display());
+    }
+    println!("Matching {} photos against {} originals...", thousands(queries.len()), thousands(index.len()));
+    let report = find::find_originals(&index, &queries, None, &stop, |_, _| {});
+    let dir = out.unwrap_or_else(|| bestofburst::ui::remover::default_dir(&queries));
+    println!("Removing watermarks...");
+    let s = bestofburst::clean::clean_all(&input, &report.matches, &dir, &stop, |_, _| {})?;
+    println!("Cleaned {} of {}  -> {}  ({})", thousands(s.written), thousands(queries.len()), s.dir.display(), elapsed(started.elapsed().as_secs()));
+    if s.unmatched > 0 {
+        println!("  {} had no sure original in that folder and were left alone.", thousands(s.unmatched));
+    }
+    for (name, e) in s.errors.iter().take(8) {
+        eprintln!("  {name}: {e}");
+    }
+    Ok(())
+}
+
+fn cmd_unmark(sent: &[PathBuf], out: Option<PathBuf>) -> Result<()> {
+    let queries = bestofburst::find::collect_queries(sent);
+    if queries.is_empty() {
+        bail!("No photos found in what was given.");
+    }
+    let started = Instant::now();
+    let stop = AtomicBool::new(false);
+    let stage = std::sync::atomic::AtomicUsize::new(0);
+    let dir = out.unwrap_or_else(|| bestofburst::ui::remover::default_dir(&queries));
+    println!("Learning the watermark from {} photos, then removing it...", thousands(queries.len()));
+    let (mark, s) = bestofburst::unmark::unmark_all(&queries, &dir, &stop, &stage, |_, _| {})?;
+    println!(
+        "  Mark: covers {:.1}% of the frame, {:.0}% opaque, colour {:.0} {:.0} {:.0} (learned from {} photos)",
+        mark.coverage * 100.0,
+        (mark.alpha[0] + mark.alpha[1] + mark.alpha[2]) / 3.0 * 100.0,
+        mark.colour[0],
+        mark.colour[1],
+        mark.colour[2],
+        mark.learned_from
+    );
+    println!("Cleaned {} of {}  -> {}  ({})", thousands(s.written), thousands(queries.len()), s.dir.display(), elapsed(started.elapsed().as_secs()));
+    if s.unmatched > 0 {
+        println!("  {} did not carry the mark where the others do and were left alone.", thousands(s.unmatched));
+    }
+    for (name, e) in s.errors.iter().take(8) {
+        eprintln!("  {name}: {e}");
+    }
+    Ok(())
+}
+
 fn cmd_status(folder: &Path, out: Option<PathBuf>) -> Result<()> {
     let input = std::path::absolute(folder).unwrap_or_else(|_| folder.to_path_buf());
     let out = out.unwrap_or_else(|| scan::default_out(&input));
@@ -413,6 +618,24 @@ fn cmd_probe(file: &Path) -> Result<()> {
         t_resize.as_secs_f64() * 1000.0,
         t_analyze.as_secs_f64() * 1000.0
     );
+    let t3 = Instant::now();
+    match bestofburst::faces::find_faces(&decode::decode_full(file, format)?.image, decode::read_orientation(file, format)) {
+        Err(e) => println!("Faces:     check unavailable ({e:#})"),
+        Ok(faces) => {
+            println!("Faces:     {}  ({:.0} ms incl. opening the file again)", faces.len(), t3.elapsed().as_secs_f64() * 1000.0);
+            for f in &faces {
+                println!(
+                    "  at {:.2},{:.2}  size {:.0}% of the long edge  eye openness left {:.2} right {:.2}  -> {}",
+                    f.x,
+                    f.y,
+                    f.size * 100.0,
+                    f.left,
+                    f.right,
+                    bestofburst::rank::eye_state(f).name()
+                );
+            }
+        }
+    }
     match bestofburst::gpu::get() {
         Err(why) => println!("GPU:       not used ({why})"),
         Ok(g) => {
