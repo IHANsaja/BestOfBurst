@@ -187,6 +187,21 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
             if theme::button(ui, label, Some("enter"), Btn::Primary, 64.0, Some(w), ready).clicked() {
                 go = true;
             }
+            // Say what is still missing instead of leaving a greyed-out button unexplained.
+            let missing = if rs.running {
+                None
+            } else if rs.sent.is_empty() {
+                Some("Step 1 is missing: choose the watermarked photos.")
+            } else if rs.originals.is_none() {
+                Some("Step 2 is missing: choose the folder that holds the original photos these previews were made from (the camera files or full-size exports).")
+            } else {
+                None
+            };
+            if let Some(m) = missing {
+                ui.add_space(8.0);
+                ui.label(theme::body(m, 14.0, theme::RED));
+                ui.label(theme::mono("Before you can start", 10.5, theme::GRAPHITE));
+            }
             if let Some(s) = &rs.result {
                 ui.add_space(8.0);
                 if s.written > 0 && theme::button(ui, "Show folder", None, Btn::OnDay, 44.0, None, true).clicked() {
