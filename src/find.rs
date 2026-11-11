@@ -991,7 +991,11 @@ pub fn collect_queries(paths: &[PathBuf]) -> Vec<PathBuf> {
     for p in paths {
         if p.is_dir() {
             let walker = walkdir::WalkDir::new(p).follow_links(false).into_iter().filter_entry(|e| {
-                !(e.file_type().is_dir() && e.depth() > 0 && e.file_name().to_string_lossy().eq_ignore_ascii_case("_bestofburst"))
+                // Our own output folders are never input.
+                !(e.file_type().is_dir() && e.depth() > 0 && {
+                    let n = e.file_name().to_string_lossy();
+                    n.eq_ignore_ascii_case("_bestofburst") || n.eq_ignore_ascii_case("watermark removed")
+                })
             });
             let mut files: Vec<PathBuf> = walker.flatten().filter(|e| e.file_type().is_file()).map(|e| e.into_path()).collect();
             files.sort();

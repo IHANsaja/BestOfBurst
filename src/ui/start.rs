@@ -90,7 +90,7 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
             b,
             "02 · ON ITS OWN",
             "WATERMARK REMOVER",
-            "Have previews with your watermark on them and the photos they were made from? Point at both. Each preview gets its picture back under the mark, rebuilt from its original, and keeps its edit and size. No culling needed.",
+            "Have previews with a watermark on them? Drop them in. The mark is learned from the photos themselves and lifted off each one; add the originals folder and the part under the mark is rebuilt from the real photo instead. No culling needed.",
             "Remove watermarks",
             "2",
             false,

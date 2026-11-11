@@ -84,7 +84,7 @@ Every decision is a hand-drawn mark, readable at a glance, like grease pencil on
 - **Honest set-asides**: out of focus or shaken, blown highlights, too dark, flat. Every reason is shown, and you can overrule any decision.
 - **Blinks, not poses**: faces are found in every photo and their eyes measured with Google's MediaPipe face landmark model (2.8 MB, built in, runs offline). Eyes shut in one frame while they are open in the rest of the burst, or on one person while everyone else's are open, are a blink: that frame is set aside when the moment has a cleaner one. Eyes held shut through the burst, or shut by most of the people together (a prayer, a kiss, a laugh), are a pose and are left alone.
 - **Find originals**: after the selection, drop the photos a client sent back (small previews, with or without your watermark, or full photos under new names) and each is matched to its original in the shoot. The watermark is worked out from what the previews share and left out of the comparison.
-- **Watermark remover**: rebuilds the picture under your watermark from the original of the same frame, keeping the preview's own edit, size and crop. Inside the culler (tick *Remove the watermark* when copying found originals) and as its own tool on the start page.
+- **Watermark remover**: rebuilds the picture under your watermark from the original of the same frame, keeping the preview's own edit, size and crop. Inside the culler (tick *Remove the watermark* when copying found originals) and as its own tool on the start page. Without originals, it learns the watermark from the previews themselves and un-blends it.
 - **Lists of names**: save the chosen photos' file names to a `.txt` and a `.csv`, with the file ending you choose (`nef` to find the RAW files in Lightroom, or none).
 - **Close calls only**: frames that are nearly equal get a **?**. Press **N** to walk through them, **Z** for 100 %, **Enter** to keep.
 - **Fast**: uses your graphics card when it helps (DirectX 12 or Vulkan) and every processor core you allow, and shows you exactly what it's doing.
@@ -174,7 +174,9 @@ It copes with resizing, re-saving, brightness and contrast edits, quarter turns 
 
 The start page offers two tools: **Choose the best shots** and **Watermark remover**.
 
-The remover takes watermarked previews and the folder with their originals. Each preview is matched to its original (as in *Find originals*), the original is brought into the preview's frame and given the preview's tones, and it replaces the preview only where the two disagree: under the mark. The rest of the preview is left as it is. Results are JPEGs in a `watermark removed` folder beside the previews (or `clean previews` inside `_bestofburst` when run from *Find originals*). It works from the originals, so it is for the photos' owner; a preview with no sure original is left alone, and nothing is ever guessed or invented.
+The remover takes watermarked previews and the folder with their originals. Each preview is matched to its original (as in *Find originals*), the original is brought into the preview's frame and given the preview's tones, and it replaces the preview only where the two disagree: under the mark. The rest of the preview is left as it is. Results are JPEGs in a `watermark removed` folder beside the previews (or `clean previews` inside `_bestofburst` when run from *Find originals*). A preview with no sure original is left alone.
+
+**Without originals.** Leave the originals folder out and the mark is learned from the watermarked photos themselves. A see-through mark (a word or logo stamped on every preview, scaled with the photo's width and centred) is the only thing that stays put across many different pictures: the median of the photos' edges, read in a space where such a mark is a step of the same height whatever is behind it, is added up into the mark's opacity map, and its exact opacity and colour are measured just inside against just outside its edge. Each photo is then un-blended (`real = (seen - opacity x colour) / (1 - opacity)`), and the thin anti-aliased rim of the mark is filled smoothly from both sides. It needs at least 3 different photos with the same mark (10 or more is better); photos where the learned mark isn't found are left alone. A fully opaque mark hides what is under it, so that needs the originals.
 
 ---
 
@@ -219,6 +221,7 @@ bestofburst ui [FOLDER]
 bestofburst probe <FILE>                                            # format, metrics, faces and eyes, timing
 bestofburst find <FOLDER> <SENT FILES OR FOLDERS>... [--copy] [--list] [--clean] [--names <ENDING>] [--out <DIR>]
 bestofburst clean <ORIGINALS FOLDER> <WATERMARKED FILES OR FOLDERS>... [--out <DIR>]   # watermark remover
+bestofburst unmark <WATERMARKED FILES OR FOLDERS>... [--out <DIR>]   # watermark remover, no originals
 ```
 
 </details>
@@ -235,6 +238,7 @@ bestofburst clean <ORIGINALS FOLDER> <WATERMARKED FILES OR FOLDERS>... [--out <D
 | `src/faces.rs` | Faces and eye openness: MediaPipe BlazeFace + 478-point face mesh (`assets/models`), run by tract |
 | `src/rank.rs` | Burst grouping with look-back, rejects, blink-or-pose, percentile scoring, subject sharpness, selection |
 | `src/clean.rs` | Watermark remover: frame the original like the preview, match tones, rebuild under the mark |
+| `src/unmark.rs` | Watermark remover without originals: learn the mark from the photos, un-blend it |
 | `src/find.rs` | Preview-to-original matching: coarse shortlist, exact comparison, learned watermark mask |
 | `src/state.rs` | `state.json`: resumable progress, rankings and your choices (atomic saves) |
 | `src/output.rs` | Picks / maybe / rejects folders (hard links or copies), `report.csv` |

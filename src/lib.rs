@@ -16,6 +16,7 @@ pub mod state;
 pub mod stats;
 pub mod sysmon;
 pub mod ui;
+pub mod unmark;
 
 /// Bump when metrics change: every file is re-analyzed when `state.json` has another version.
 pub const ANALYSIS_VERSION: u32 = 1;

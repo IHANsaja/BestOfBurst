@@ -1,6 +1,7 @@
-//! Watermark remover, on its own: watermarked photos on one side, the folder with their
-//! originals on the other. Each watermarked photo is matched to its original and rebuilt
-//! under the mark (see `clean`).
+//! Watermark remover, on its own: the watermarked photos and, if there is one, the folder
+//! with their originals. With originals, each photo is matched to its original and rebuilt
+//! under the mark (see `clean`). Without, the mark is learned from the photos themselves and
+//! un-blended (see `unmark`).
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -25,6 +26,8 @@ pub struct RemoverState {
     pub progress: Arc<(AtomicUsize, AtomicUsize)>,
     pub stop: Arc<AtomicBool>,
     pub result: Option<CleanSummary>,
+    /// The last run learned the mark from the photos (no originals).
+    pub learned: bool,
 }
 
 /// Where cleaned photos go when nothing else is said: a `watermark removed` folder beside the
@@ -39,12 +42,13 @@ pub fn default_dir(queries: &[PathBuf]) -> PathBuf {
 
 pub fn start(app: &mut BestOfBurstApp, ctx: &egui::Context) {
     let rs = &mut app.remover;
-    let Some(originals) = rs.originals.clone() else { return };
+    let originals = rs.originals.clone();
     if rs.running || rs.sent.is_empty() {
         return;
     }
     rs.running = true;
     rs.result = None;
+    rs.learned = originals.is_none();
     rs.stage = Arc::new(AtomicUsize::new(0));
     rs.progress = Arc::new((AtomicUsize::new(0), AtomicUsize::new(0)));
     rs.stop = Arc::new(AtomicBool::new(false));
@@ -59,6 +63,9 @@ pub fn start(app: &mut BestOfBurstApp, ctx: &egui::Context) {
         let r = (|| -> anyhow::Result<CleanSummary> {
             let queries = find::collect_queries(&sent);
             anyhow::ensure!(!queries.is_empty(), "There are no photos in what you chose.");
+            let Some(originals) = originals else {
+                return crate::unmark::unmark_all(&queries, &default_dir(&queries), &stop, &stage, tick).map(|(_, s)| s);
+            };
             let index = find::Index::open(&originals, &stop, tick);
             anyhow::ensure!(!index.is_empty(), "No photos could be opened in the originals folder.");
             stage.store(1, Ordering::Relaxed);
@@ -149,26 +156,37 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
         let msg = if rs.running {
             "Working through them. Big photos take a moment each.".to_string()
         } else if let Some(s) = &rs.result {
-            if s.written > 0 { format!("{} are clean. Have a look.", theme::plural(s.written, "photo")) } else { "I couldn't pair these with originals in that folder.".to_string() }
+            if s.written > 0 {
+                format!("{} are clean. Have a look.", theme::plural(s.written, "photo"))
+            } else if rs.learned {
+                "These photos don't carry the watermark the others do.".to_string()
+            } else {
+                "I couldn't pair these with originals in that folder.".to_string()
+            }
         } else {
-            "Give me the watermarked photos and the folder with the real ones.".to_string()
+            "Give me the watermarked photos. The originals help, but I can do without.".to_string()
         };
         let mood = if rs.result.as_ref().is_some_and(|s| s.written > 0) { Mood::Cheer } else { Mood::Idle };
         let _ = glim::card(ui, mood, false, &msg, 60.0, app.time(), app.reduced_motion);
         ui.add_space(14.0);
         ui.label(theme::mono("How it works", 11.0, theme::GRAPHITE));
         ui.label(theme::body(
-            "Each watermarked photo is matched to its original by what is in the picture (the file name helps, but isn't needed). The part under the watermark is rebuilt from the original, in the preview's own colours and size. The rest of the preview is left exactly as it is.",
+            "Without originals: the watermark is learned from the photos themselves. The same see-through mark sits on every one, so its shape, opacity and colour show up once many different pictures are compared, and it is then lifted off each photo. Give at least 3 photos (more is better) carrying the same mark.",
             14.0,
             theme::INK_2,
         ));
         ui.add_space(10.0);
-        ui.label(theme::body("It needs the originals: that is what makes the result the real picture and not a guess.", 14.0, theme::INK_2));
+        ui.label(theme::body(
+            "With the originals folder: each photo is matched to its original and the part under the watermark is rebuilt from it, which works for any mark, even a solid one.",
+            14.0,
+            theme::INK_2,
+        ));
         if let Some(s) = &rs.result {
             ui.add_space(12.0);
             theme::rule(ui, theme::INK, 1.5);
             ui.add_space(8.0);
-            for (n, label) in [(s.written, "cleaned"), (s.unmatched, "without a sure original"), (s.errors.len(), "couldn't be cleaned")] {
+            let unmatched = if rs.learned { "without the mark, left alone" } else { "without a sure original" };
+            for (n, label) in [(s.written, "cleaned"), (s.unmatched, unmatched), (s.errors.len(), "couldn't be cleaned")] {
                 if n > 0 || label == "cleaned" {
                     ui.horizontal(|ui| {
                         ui.label(theme::xp(theme::thousands(n), 28.0, theme::INK));
@@ -182,7 +200,7 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
         }
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
             let w = ui.available_width();
-            let ready = !rs.sent.is_empty() && rs.originals.is_some() && !rs.running;
+            let ready = !rs.sent.is_empty() && !rs.running;
             let label = if rs.running { "Working..." } else { "Remove watermarks" };
             if theme::button(ui, label, Some("enter"), Btn::Primary, 64.0, Some(w), ready).clicked() {
                 go = true;
@@ -192,8 +210,6 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
                 None
             } else if rs.sent.is_empty() {
                 Some("Step 1 is missing: choose the watermarked photos.")
-            } else if rs.originals.is_none() {
-                Some("Step 2 is missing: choose the folder that holds the original photos these previews were made from (the camera files or full-size exports).")
             } else {
                 None
             };
@@ -234,19 +250,26 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
             }
         });
         ui.add_space(22.0);
-        let orig = app.remover.originals.as_ref().map(|o| o.display().to_string()).unwrap_or_else(|| "nothing chosen yet".into());
-        step(ui, "STEP 2", "The folder with the originals", &orig, app.remover.originals.is_some(), false);
+        let orig = app.remover.originals.as_ref().map(|o| o.display().to_string()).unwrap_or_else(|| "not needed: the watermark is learned from the photos".into());
+        step(ui, "STEP 2 - OPTIONAL", "The folder with the originals", &orig, app.remover.originals.is_some(), false);
         ui.add_space(8.0);
-        if theme::button(ui, "Choose the originals folder", None, Btn::OnDay, 44.0, None, !app.remover.running).clicked() {
-            if let Some(f) = rfd::FileDialog::new().set_title("Choose the folder with the originals").pick_folder() {
-                app.remover.originals = Some(f);
+        ui.horizontal(|ui| {
+            if theme::button(ui, "Choose the originals folder", None, Btn::OnDay, 44.0, None, !app.remover.running).clicked() {
+                if let Some(f) = rfd::FileDialog::new().set_title("Choose the folder with the originals").pick_folder() {
+                    app.remover.originals = Some(f);
+                    app.remover.result = None;
+                }
+            }
+            if app.remover.originals.is_some() && theme::button(ui, "Do without", None, Btn::OnDay, 44.0, None, !app.remover.running).clicked() {
+                app.remover.originals = None;
                 app.remover.result = None;
             }
-        }
+        });
         ui.add_space(22.0);
         if app.remover.running {
             let (done, total) = (app.remover.progress.0.load(Ordering::Relaxed), app.remover.progress.1.load(Ordering::Relaxed));
             let what = match app.remover.stage.load(Ordering::Relaxed) {
+                0 if app.remover.learned => "Learning the watermark from the photos",
                 0 => "Reading the originals",
                 1 => "Pairing each photo with its original",
                 _ => "Removing watermarks",

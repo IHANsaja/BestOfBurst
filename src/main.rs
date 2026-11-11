@@ -57,6 +57,16 @@ enum Cmd {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Remove a watermark without the originals: the mark is learned from the watermarked
+    /// photos themselves (give at least 3 different photos carrying the same mark).
+    Unmark {
+        /// The watermarked photos: files and/or folders.
+        #[arg(required = true)]
+        sent: Vec<PathBuf>,
+        /// Where the cleaned photos go [default: a `watermark removed` folder beside the first photo].
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
 }
 
 #[derive(Args)]
@@ -173,6 +183,7 @@ fn main() -> ExitCode {
         Some(Cmd::Probe { file }) => cmd_probe(&file),
         Some(Cmd::Find(a)) => cmd_find(a),
         Some(Cmd::Clean { originals, sent, out }) => cmd_clean(&originals, &sent, out),
+        Some(Cmd::Unmark { sent, out }) => cmd_unmark(&sent, out),
     };
     report(result)
 }
@@ -480,6 +491,36 @@ fn cmd_clean(originals: &Path, sent: &[PathBuf], out: Option<PathBuf>) -> Result
     println!("Cleaned {} of {}  -> {}  ({})", thousands(s.written), thousands(queries.len()), s.dir.display(), elapsed(started.elapsed().as_secs()));
     if s.unmatched > 0 {
         println!("  {} had no sure original in that folder and were left alone.", thousands(s.unmatched));
+    }
+    for (name, e) in s.errors.iter().take(8) {
+        eprintln!("  {name}: {e}");
+    }
+    Ok(())
+}
+
+fn cmd_unmark(sent: &[PathBuf], out: Option<PathBuf>) -> Result<()> {
+    let queries = bestofburst::find::collect_queries(sent);
+    if queries.is_empty() {
+        bail!("No photos found in what was given.");
+    }
+    let started = Instant::now();
+    let stop = AtomicBool::new(false);
+    let stage = std::sync::atomic::AtomicUsize::new(0);
+    let dir = out.unwrap_or_else(|| bestofburst::ui::remover::default_dir(&queries));
+    println!("Learning the watermark from {} photos, then removing it...", thousands(queries.len()));
+    let (mark, s) = bestofburst::unmark::unmark_all(&queries, &dir, &stop, &stage, |_, _| {})?;
+    println!(
+        "  Mark: covers {:.1}% of the frame, {:.0}% opaque, colour {:.0} {:.0} {:.0} (learned from {} photos)",
+        mark.coverage * 100.0,
+        (mark.alpha[0] + mark.alpha[1] + mark.alpha[2]) / 3.0 * 100.0,
+        mark.colour[0],
+        mark.colour[1],
+        mark.colour[2],
+        mark.learned_from
+    );
+    println!("Cleaned {} of {}  -> {}  ({})", thousands(s.written), thousands(queries.len()), s.dir.display(), elapsed(started.elapsed().as_secs()));
+    if s.unmatched > 0 {
+        println!("  {} did not carry the mark where the others do and were left alone.", thousands(s.unmatched));
     }
     for (name, e) in s.errors.iter().take(8) {
         eprintln!("  {name}: {e}");
