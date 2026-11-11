@@ -534,6 +534,47 @@ pub fn checklist_row(ui: &mut Ui, checked: &mut bool, locked: bool, title: &str,
     changed
 }
 
+/// The file-ending box for name lists: empty keeps each photo's own ending.
+pub fn ending_field(ui: &mut Ui, text: &mut String) {
+    ui.horizontal(|ui| {
+        ui.add_space(26.0);
+        let l = ui.label(mono("File ending in the list", 10.5, GRAPHITE));
+        ui.add(
+            egui::TextEdit::singleline(text)
+                .font(f_mono_semi(12.0))
+                .hint_text("same as photo")
+                .desired_width(110.0),
+        )
+        .labelled_by(l.id)
+        .on_hover_text("Leave empty to keep each photo's own ending. Type jpg, nef, cr3... to change it, or none to leave it off.");
+    });
+    ui.add_space(8.0);
+}
+
+/// A square checkbox with its label on the dark side panel.
+pub fn dark_check(ui: &mut Ui, checked: &mut bool, label: &str) -> bool {
+    let g = galley(ui, label, f_body(14.0), TABLE, 0.0);
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 28.0), Sense::click());
+    let on = *checked;
+    resp.widget_info(|| WidgetInfo::selected(Role::CheckBox, true, on, label));
+    let b = Rect::from_min_size(pos2(rect.min.x, rect.center().y - 10.0), vec2(20.0, 20.0));
+    let p = ui.painter();
+    if on {
+        p.rect_filled(b, 0.0, SAFELIGHT);
+        let s = Stroke::new(2.2, INK);
+        p.line_segment([pos2(b.min.x + 4.5, b.center().y), pos2(b.min.x + 8.5, b.max.y - 5.0)], s);
+        p.line_segment([pos2(b.min.x + 8.5, b.max.y - 5.0), pos2(b.max.x - 4.0, b.min.y + 5.0)], s);
+    } else {
+        p.rect_stroke(b, 0.0, Stroke::new(1.5, if resp.hovered() { TABLE } else { ASH }), StrokeKind::Inside);
+    }
+    p.galley(pos2(b.max.x + 10.0, rect.center().y - g.size().y / 2.0), g, TABLE);
+    focus_ring(ui, &resp);
+    if resp.clicked() {
+        *checked = !*checked;
+    }
+    resp.clicked()
+}
+
 /// Film well: film-base background with sprocket dashes along the top and bottom.
 pub fn film_well(ui: &Ui, rect: Rect) {
     let p = ui.painter();

@@ -40,6 +40,8 @@ rayon = "1.12.0"
 rfd = "0.17.2"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+# Runs Google's MediaPipe face models (assets/models) on the CPU, pure Rust, no DLLs.
+tract-tflite = "0.23.10"
 walkdir = "2.5.0"
 windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Imaging", "Win32_System_Com", "Win32_System_Console", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_System_SystemInformation", "Win32_System_LibraryLoader", "Win32_System_Performance"] }
 zune-jpeg = "0.5.15"
@@ -52,6 +54,9 @@ codegen-units = 1
 # Decoding in debug builds is painfully slow; keep dependencies optimized.
 [profile.dev.package."*"]
 opt-level = 3
+# Dependencies carry no debug symbols: with them, the test executables' PDB files outgrow what
+# the MSVC linker accepts (LNK1318).
+debug = false
 
 [profile.test]
 opt-level = 1

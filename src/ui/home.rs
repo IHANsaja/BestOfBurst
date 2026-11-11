@@ -109,6 +109,7 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
     let info = app.folder_info.clone();
     let can_start = app.folder.is_some() && !app.checking_folder && info.as_ref().map(|i| i.error.is_none()).unwrap_or(false);
     let open_results = !app.retry_failed && info.as_ref().map(|i| i.new == 0 && i.has_rank).unwrap_or(false);
+    let eyes_due = if app.settings.eyes { info.as_ref().map(|i| i.eyes_due).unwrap_or(0) } else { 0 };
 
     let shoot = app.shoot_name();
     let mut go_home = false;
@@ -129,7 +130,10 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
         },
     );
     app.settings.night = night;
-    let _ = go_home;
+    if go_home {
+        app.screen = app::Screen::Start;
+        return;
+    }
 
     // Side panel: always dark chrome.
     let side = egui::Frame::new().fill(theme::INK).inner_margin(24.0);
@@ -149,12 +153,10 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
             }
             if open_results {
                 ui.visuals_mut().override_text_color = Some(theme::TABLE);
-                if theme::button(ui, "Check for new photos", None, Btn::OnDark, 40.0, Some(ui.available_width()), can_start).clicked() {
+                let again = if eyes_due > 0 { format!("Check eyes on {} photos", fmt_n(eyes_due)) } else { "Check for new photos".to_string() };
+                if theme::button(ui, &again, None, Btn::OnDark, 40.0, Some(ui.available_width()), can_start).clicked() {
                     rerun = true;
                 }
-            }
-            if let Some((text, err, _)) = &app.message {
-                ui.label(theme::body(text, 13.0, if *err { theme::SAFELIGHT_SOFT } else { theme::TABLE }));
             }
         });
 
@@ -165,6 +167,8 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
             } else if let Some(i) = &info {
                 if let Some(e) = &i.error {
                     e.clone()
+                } else if i.new == 0 && i.has_rank && eyes_due > 0 {
+                    format!("All {} photos are checked, but from before I could spot blinks. Open the sheet as it is, or let me check the eyes.", fmt_n(i.total))
                 } else if i.new == 0 && i.has_rank {
                     format!("All {} photos are checked. Open the contact sheet whenever you like.", fmt_n(i.total))
                 } else {
@@ -194,6 +198,16 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
             let mut sel = PRESETS.iter().position(|x| *x == app.preset).unwrap_or(0);
             if theme::segmented(ui, &SHOT_TYPES, &mut sel, 2, true) {
                 app.preset = PRESETS[sel];
+            }
+            ui.add_space(8.0);
+
+            help::labelled(ui, "Closed eyes", "eyes", help::EYES, true, theme::ASH);
+            let before = app.settings.eyes;
+            theme::dark_check(ui, &mut app.settings.eyes, "Find faces and set aside blinks");
+            if app.settings.eyes != before {
+                if let Some(f) = app.folder.clone() {
+                    app.choose_folder(f, &ctx);
+                }
             }
             ui.add_space(8.0);
 

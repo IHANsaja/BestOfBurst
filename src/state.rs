@@ -32,6 +32,10 @@ pub struct FileEntry {
     pub thumb: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tiles: Option<Vec<f32>>,
+    /// Faces with their eye openness (empty: no face). Absent when the closed-eyes check has
+    /// not run on this photo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub faces: Option<Vec<crate::faces::Face>>,
 }
 
 impl FileEntry {
@@ -199,6 +203,11 @@ impl State {
             .get(rel)
             .map(|e| e.size == size && e.mtime_ms == mtime_ms && (e.status == "done" || e.status == "failed"))
             .unwrap_or(false)
+    }
+
+    /// Analyzed, but before the closed-eyes check existed (or with it switched off).
+    pub fn lacks_eyes(&self, rel: &str) -> bool {
+        self.files.get(rel).map(|e| e.is_done() && e.faces.is_none()).unwrap_or(false)
     }
 
     pub fn counts(&self) -> (usize, usize) {

@@ -1,6 +1,6 @@
 //! The window, driven offscreen with egui_kittest through every Grease Pencil screen: Home,
 //! contact sheet, overrides and undo, Focus (loupe), Compare, Done with delivery, Glim's corner,
-//! night table and the safelight break. Set BOB_UI_SNAPSHOTS=<dir> to save renders.
+//! night table, the safelight break, and Find originals. Set BOB_UI_SNAPSHOTS=<dir> to save renders.
 
 mod common;
 
@@ -205,4 +205,102 @@ fn window_flow() {
     h.key_press(Key::Escape);
     settle(&mut h, |a| a.screen == Screen::Done);
     assert_eq!(screen(&h), Screen::Done);
+}
+
+#[derive(Debug)]
+struct Dropped(PathBuf);
+
+impl egui::DroppedFile for Dropped {
+    fn path(&self) -> &Path {
+        &self.0
+    }
+    fn bytes(&self) -> Result<Vec<u8>, String> {
+        std::fs::read(&self.0).map_err(|e| e.to_string())
+    }
+}
+
+/// The step after the selection: drop what a client sent, get the originals.
+#[test]
+fn find_originals_flow() {
+    use bestofburst::find::Verdict;
+    let dir = scratch("ui-find").join("Graduation 2026");
+    std::fs::create_dir_all(&dir).unwrap();
+    let appdata = scratch("ui-find-appdata");
+    std::env::set_var("APPDATA", &appdata);
+    shoot(&dir);
+    let mut cfg = RunConfig::new(dir.clone());
+    cfg.keep = Keep::Count(3);
+    cfg.threads = 2;
+    cfg.eyes = false;
+    let o = engine::analyze_folder(&cfg, &Arc::new(AtomicBool::new(false)), |_| {}).unwrap();
+    let mut state = o.state;
+    engine::rank_and_output(&mut state, &cfg).unwrap();
+
+    // What the client sends back: small re-saved previews that kept the file name, one photo
+    // from somewhere else.
+    let sent = scratch("ui-find-sent");
+    for name in ["IMG_0002", "IMG_0008", "IMG_0013"] {
+        let data = std::fs::read(dir.join(format!("{name}.jpg"))).unwrap();
+        let img = bestofburst::decode::decode_jpeg_bytes(&data).unwrap();
+        let small = bestofburst::decode::resize_long_edge(img, 640).unwrap();
+        std::fs::write(sent.join(format!("{name}-preview.jpg")), encode_jpeg(&small, 60)).unwrap();
+    }
+    save_jpeg(&checkerboard(600, 400, 40), &sent.join("holiday.jpg"));
+
+    let folder = dir.clone();
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1440.0, 900.0))
+        .wgpu()
+        .build_eframe(move |cc| BestOfBurstApp::new(cc, Some(folder)));
+    settle(&mut h, |a| a.folder_info.is_some());
+    h.key_press(Key::Enter);
+    settle(&mut h, |a| a.screen == Screen::Review);
+    assert_eq!(screen(&h), Screen::Review);
+
+    h.key_press_modifiers(egui::Modifiers::COMMAND, Key::O);
+    settle(&mut h, |a| a.screen == Screen::Find);
+    assert_eq!(screen(&h), Screen::Find);
+    snapshot(&mut h, "10_find_empty");
+
+    h.input_mut().dropped_files.push(Arc::new(Dropped(sent.clone())));
+    settle(&mut h, |a| a.find.report.is_some());
+    let report = h.state().find.report.as_ref().expect("matched");
+    assert_eq!(report.matches.len(), 4);
+    assert_eq!(report.count(Verdict::Found), 3, "{:?}", report.matches);
+    assert_eq!(report.count(Verdict::NotFound), 1);
+    snapshot(&mut h, "11_find_results");
+
+    h.key_press_modifiers(egui::Modifiers::COMMAND, Key::E);
+    settle(&mut h, |a| a.find.delivered.is_some());
+    let d = h.state().find.delivered.clone().expect("copied");
+    assert_eq!(d.written, 3);
+    assert!(d.dir.join("IMG_0008.jpg").exists());
+    snapshot(&mut h, "12_find_copied");
+
+    h.key_press(Key::Escape);
+    settle(&mut h, |a| a.screen == Screen::Review);
+    assert_eq!(screen(&h), Screen::Review);
+}
+
+/// Without a folder the window opens on the start page, with both tools one key away.
+#[test]
+fn start_page_offers_both_tools() {
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1440.0, 900.0))
+        .wgpu()
+        .build_eframe(|cc| BestOfBurstApp::new(cc, None));
+    settle(&mut h, |_| true);
+    assert_eq!(screen(&h), Screen::Start);
+    snapshot(&mut h, "0_start");
+    h.key_press(Key::Num2);
+    settle(&mut h, |a| a.screen == Screen::Remover);
+    assert_eq!(screen(&h), Screen::Remover);
+    h.state_mut().flash("Done: 12 photos without the watermark are in D:\\Proofs\\watermark removed", false);
+    settle(&mut h, |_| true);
+    snapshot(&mut h, "0b_remover_toast");
+    h.key_press(Key::Escape);
+    settle(&mut h, |a| a.screen == Screen::Start);
+    h.get_by_label("CHOOSE THE BEST SHOTS").click();
+    settle(&mut h, |a| a.screen == Screen::Home);
+    assert_eq!(screen(&h), Screen::Home);
 }

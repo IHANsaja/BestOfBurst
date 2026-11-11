@@ -3,8 +3,11 @@
 //! The same engine is driven by the command line (`main.rs`) and the egui window (`ui`).
 
 pub mod analyze;
+pub mod clean;
 pub mod decode;
 pub mod engine;
+pub mod faces;
+pub mod find;
 pub mod gpu;
 pub mod output;
 pub mod rank;

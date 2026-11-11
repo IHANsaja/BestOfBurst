@@ -48,6 +48,7 @@ Get the latest version from the **[Releases page](https://github.com/IHANsaja/Be
 2. **Start culling**: every photo is checked for focus, exposure, contrast, noise and colour. Photos of the same moment are stacked together.
 3. **Look at the close calls**: open the loupe to see the subject at 100 % and decide in a keystroke.
 4. **Deliver**: your keepers land in a `picks` folder inside the shoot, numbered best-first, ready for Lightroom, Capture One or your client.
+5. **Find originals** *(when a client replies)*: drop the previews they chose and get the matching originals in a `found originals` folder.
 
 Your original files are **never** changed, moved, renamed or deleted, and nothing ever leaves your computer.
 
@@ -81,6 +82,10 @@ Every decision is a hand-drawn mark, readable at a glance, like grease pencil on
 - **Burst stacking**: photos of the same moment are grouped, even when you return to the same pose a minute later. By default only the best frame of each moment becomes a keeper.
 - **Sharp where it matters**: within a burst, frames are compared on the subject, so a busy background never beats a sharp face.
 - **Honest set-asides**: out of focus or shaken, blown highlights, too dark, flat. Every reason is shown, and you can overrule any decision.
+- **Blinks, not poses**: faces are found in every photo and their eyes measured with Google's MediaPipe face landmark model (2.8 MB, built in, runs offline). Eyes shut in one frame while they are open in the rest of the burst, or on one person while everyone else's are open, are a blink: that frame is set aside when the moment has a cleaner one. Eyes held shut through the burst, or shut by most of the people together (a prayer, a kiss, a laugh), are a pose and are left alone.
+- **Find originals**: after the selection, drop the photos a client sent back (small previews, with or without your watermark, or full photos under new names) and each is matched to its original in the shoot. The watermark is worked out from what the previews share and left out of the comparison.
+- **Watermark remover**: rebuilds the picture under your watermark from the original of the same frame, keeping the preview's own edit, size and crop. Inside the culler (tick *Remove the watermark* when copying found originals) and as its own tool on the start page.
+- **Lists of names**: save the chosen photos' file names to a `.txt` and a `.csv`, with the file ending you choose (`nef` to find the RAW files in Lightroom, or none).
 - **Close calls only**: frames that are nearly equal get a **?**. Press **N** to walk through them, **Z** for 100 %, **Enter** to keep.
 - **Fast**: uses your graphics card when it helps (DirectX 12 or Vulkan) and every processor core you allow, and shows you exactly what it's doing.
 - **Resumable**: pause at any time; progress is saved and picked up where you left off. Changing how many to keep re-ranks in under a second.
@@ -129,6 +134,7 @@ If an add-on is missing, BestOfBurst tells you which one to get from the Microso
 | | G | Spread out or stack this burst |
 | | 1 / 2 / 3 / 4 | Keepers / Maybe / Set aside / All |
 | | Ctrl+E | Deliver |
+| | Ctrl+O | Find originals |
 | Loupe | Left / Right, 1–4 | Another photo of the burst |
 | | P | Move the circle |
 | | Enter | Keep & next close call |
@@ -149,6 +155,26 @@ If an add-on is missing, BestOfBurst tells you which one to get from the Microso
 | `report.csv` | Every photo with its quality and decision; opens in Excel |
 
 Files in these folders are shortcuts (hard links) by default: they open like the real photos but take no extra disk space, and deleting one never deletes your original. **If you plan to edit photos inside `picks`, tick *Make full copies***, because saving over a shortcut changes the original too.
+
+## Find originals
+
+Clients usually choose from small previews and send those back, because they download quickly; sometimes they send the full photo under another name. On the contact sheet press **Ctrl+O**, then drop what they sent: one photo, several, or a whole folder.
+
+| Result | Meaning |
+| --- | --- |
+| Circle | Found: one original, clearly |
+| **?** | Two frames of a burst are nearly the same; pick the right one (*This is it* / *Use the other*) |
+| Cross | Not a photo from this shoot |
+
+It copes with resizing, re-saving, brightness and contrast edits, quarter turns and watermarks. A watermark is learned from the matches themselves (the part of the previews that differs from the originals in the same place every time) and ignored on a second pass, so it cannot blur the match. Light crops (up to about a fifth off each edge) are lined up too; a cropped match is shown with a **?** for a look unless its file name agrees with the original's. Heavy crops and collages can't be matched.
+
+**Copy originals** (Ctrl+E) fills `<your shoot>\_bestofburst\found originals\` with the originals under their own names and writes `found.csv` (sent file, original, how alike). Nothing is ever written to the photos you were sent or to your originals.
+
+## Watermark remover
+
+The start page offers two tools: **Choose the best shots** and **Watermark remover**.
+
+The remover takes watermarked previews and the folder with their originals. Each preview is matched to its original (as in *Find originals*), the original is brought into the preview's frame and given the preview's tones, and it replaces the preview only where the two disagree: under the mark. The rest of the preview is left as it is. Results are JPEGs in a `watermark removed` folder beside the previews (or `clean previews` inside `_bestofburst` when run from *Find originals*). It works from the originals, so it is for the photos' owner; a preview with no sure original is left alone, and nothing is ever guessed or invented.
 
 ---
 
@@ -186,11 +212,13 @@ The same exe has a command line for scripting and batch use:
 bestofburst run <FOLDER> [--keep <N> | --keep-percent <P>] [--preset <general|portrait|sports|landscape>]
                   [--out <DIR>] [--threads <N>] [--max-per-group <N>]
                   [--maybe] [--rejects] [--copy] [--keep-names] [--retry-failed]
-                  [--engine <auto|gpu|cpu>]
+                  [--engine <auto|gpu|cpu>] [--no-eyes]
 bestofburst rank <FOLDER> [same ranking and output flags as run]   # re-rank from state.json only
 bestofburst status <FOLDER> [--out <DIR>]
 bestofburst ui [FOLDER]
-bestofburst probe <FILE>                                            # format, metrics, GPU vs CPU timing
+bestofburst probe <FILE>                                            # format, metrics, faces and eyes, timing
+bestofburst find <FOLDER> <SENT FILES OR FOLDERS>... [--copy] [--list] [--clean] [--names <ENDING>] [--out <DIR>]
+bestofburst clean <ORIGINALS FOLDER> <WATERMARKED FILES OR FOLDERS>... [--out <DIR>]   # watermark remover
 ```
 
 </details>
@@ -204,14 +232,17 @@ bestofburst probe <FILE>                                            # format, me
 | `src/decode/` | Decoders: zune-jpeg, image, jxl-oxide, embedded RAW preview, Windows Imaging Component |
 | `src/analyze.rs` | Eight metrics over an 8 × 8 tile grid, 64-bit dHash, capture time |
 | `src/gpu.rs` | wgpu compute shaders: Catmull-Rom resize, tile sums, dHash cells, thumbnail |
-| `src/rank.rs` | Burst grouping with look-back, rejects, percentile scoring, subject sharpness, selection |
+| `src/faces.rs` | Faces and eye openness: MediaPipe BlazeFace + 478-point face mesh (`assets/models`), run by tract |
+| `src/rank.rs` | Burst grouping with look-back, rejects, blink-or-pose, percentile scoring, subject sharpness, selection |
+| `src/clean.rs` | Watermark remover: frame the original like the preview, match tones, rebuild under the mark |
+| `src/find.rs` | Preview-to-original matching: coarse shortlist, exact comparison, learned watermark mask |
 | `src/state.rs` | `state.json`: resumable progress, rankings and your choices (atomic saves) |
 | `src/output.rs` | Picks / maybe / rejects folders (hard links or copies), `report.csv` |
 | `src/engine.rs` | The pipeline shared by the window and the CLI |
 | `src/sysmon.rs` | Live CPU and GPU readings (Windows counters, NVML) |
 | `src/ui/` | The egui window in the Grease Pencil design system ([DESIGN.md](DESIGN.md)) |
 
-Grouping constants and set-aside thresholds live at the top of `src/rank.rs`. Tune them against a real shoot.
+Grouping constants, set-aside thresholds and the eye thresholds live at the top of `src/rank.rs`; matching thresholds at the top of `src/find.rs`. Tune them against a real shoot.
 
 </details>
 

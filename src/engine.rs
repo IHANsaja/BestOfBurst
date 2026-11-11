@@ -38,6 +38,8 @@ pub struct RunConfig {
     pub retry_failed: bool,
     /// Which hardware analyzes the decoded photos.
     pub engine: EngineChoice,
+    /// Find faces and measure their eyes, so blinks can be set aside.
+    pub eyes: bool,
 }
 
 /// Auto uses the graphics card when one works and the processor otherwise.
@@ -91,6 +93,7 @@ impl RunConfig {
             output: OutputOptions::default(),
             retry_failed: false,
             engine: EngineChoice::Auto,
+            eyes: true,
         }
     }
 }
@@ -139,7 +142,7 @@ fn us(t: Instant) -> u64 {
     t.elapsed().as_micros() as u64
 }
 
-fn analyze_one(item: &ScanItem, out: &Path, gpu: Option<&gpu::Gpu>) -> Result<FileEntry> {
+fn analyze_one(item: &ScanItem, out: &Path, gpu: Option<&gpu::Gpu>, eyes: bool) -> Result<FileEntry> {
     let t = Instant::now();
     let d = {
         let _b = stats::Busy::new(&STATS.decoding);
@@ -149,6 +152,16 @@ fn analyze_one(item: &ScanItem, out: &Path, gpu: Option<&gpu::Gpu>) -> Result<Fi
     if d.image.width < decode::MIN_EDGE || d.image.height < decode::MIN_EDGE {
         bail!("too small");
     }
+    // Faces come from the full-size photo, before it is shrunk. A photo the face models choke
+    // on simply has no eye data.
+    let faces = if eyes {
+        let t = Instant::now();
+        let f = crate::faces::find_faces(&d.image, decode::read_orientation(&item.abs, item.format)).ok();
+        STATS.cpu_analyze_us.fetch_add(us(t), Relaxed);
+        f
+    } else {
+        None
+    };
     let id = fnv1a_hex(&item.rel);
     let thumb_path = out.join("thumbs").join(format!("{id}.jpg"));
 
@@ -200,16 +213,17 @@ fn analyze_one(item: &ScanItem, out: &Path, gpu: Option<&gpu::Gpu>) -> Result<Fi
         error: None,
         thumb,
         tiles: Some(tiles.to_vec()),
+        faces,
     })
 }
 
 /// Decode and analyze one file on the CPU. A decoder error or panic is recorded as `failed`.
 pub fn process(item: &ScanItem, out: &Path) -> FileEntry {
-    process_with(item, out, None)
+    process_with(item, out, None, false)
 }
 
 /// Decode and analyze one file, on the GPU when given one.
-pub fn process_with(item: &ScanItem, out: &Path, gpu: Option<&gpu::Gpu>) -> FileEntry {
+pub fn process_with(item: &ScanItem, out: &Path, gpu: Option<&gpu::Gpu>, eyes: bool) -> FileEntry {
     let _b = stats::Busy::new(&STATS.busy);
     let failed = |error: String| FileEntry {
         size: item.size,
@@ -223,8 +237,9 @@ pub fn process_with(item: &ScanItem, out: &Path, gpu: Option<&gpu::Gpu>) -> File
         error: Some(error),
         thumb: None,
         tiles: None,
+        faces: None,
     };
-    match catch_unwind(AssertUnwindSafe(|| analyze_one(item, out, gpu))) {
+    match catch_unwind(AssertUnwindSafe(|| analyze_one(item, out, gpu, eyes))) {
         Ok(Ok(entry)) => entry,
         Ok(Err(e)) => failed(format!("{e:#}").split_whitespace().collect::<Vec<_>>().join(" ")),
         Err(_) => failed("decoder crashed".into()),
@@ -254,10 +269,21 @@ pub fn analyze_folder(cfg: &RunConfig, stop: &Arc<AtomicBool>, mut on_event: imp
     state.files.retain(|k, _| present.contains(k.as_str()));
     state.overrides.retain(|k, _| present.contains(k.as_str()));
 
+    // The face models load once, here; without them the run goes on without the eye check.
+    let eyes = cfg.eyes
+        && match crate::faces::warm_up() {
+            Ok(()) => true,
+            Err(e) => {
+                on_event(Event::Warning(format!("The closed-eyes check is unavailable ({e}); carrying on without it.")));
+                false
+            }
+        };
+
     let todo: Vec<ScanItem> = items
         .iter()
         .filter(|i| {
             !state.is_current(&i.rel, i.size, i.mtime_ms)
+                || (eyes && state.lacks_eyes(&i.rel))
                 || (cfg.retry_failed && state.files.get(&i.rel).map(|e| e.status == "failed").unwrap_or(false))
         })
         .cloned()
@@ -303,7 +329,7 @@ pub fn analyze_folder(cfg: &RunConfig, stop: &Arc<AtomicBool>, mut on_event: imp
                 if worker_stop.load(Ordering::Relaxed) {
                     return;
                 }
-                let entry = process_with(item, &out_dir, gpu_dev.as_deref());
+                let entry = process_with(item, &out_dir, gpu_dev.as_deref(), eyes);
                 let _ = tx.send((item.clone(), entry));
             });
         });
