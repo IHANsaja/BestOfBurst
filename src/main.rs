@@ -66,6 +66,9 @@ enum Cmd {
         /// Where the cleaned photos go [default: a `watermark removed` folder beside the first photo].
         #[arg(long)]
         out: Option<PathBuf>,
+        /// Do not clean the mark's edge with the AI model, even when it is installed.
+        #[arg(long)]
+        no_ai: bool,
     },
 }
 
@@ -183,7 +186,7 @@ fn main() -> ExitCode {
         Some(Cmd::Probe { file }) => cmd_probe(&file),
         Some(Cmd::Find(a)) => cmd_find(a),
         Some(Cmd::Clean { originals, sent, out }) => cmd_clean(&originals, &sent, out),
-        Some(Cmd::Unmark { sent, out }) => cmd_unmark(&sent, out),
+        Some(Cmd::Unmark { sent, out, no_ai }) => cmd_unmark(&sent, out, no_ai),
     };
     report(result)
 }
@@ -498,7 +501,7 @@ fn cmd_clean(originals: &Path, sent: &[PathBuf], out: Option<PathBuf>) -> Result
     Ok(())
 }
 
-fn cmd_unmark(sent: &[PathBuf], out: Option<PathBuf>) -> Result<()> {
+fn cmd_unmark(sent: &[PathBuf], out: Option<PathBuf>, no_ai: bool) -> Result<()> {
     let queries = bestofburst::find::collect_queries(sent);
     if queries.is_empty() {
         bail!("No photos found in what was given.");
@@ -507,8 +510,29 @@ fn cmd_unmark(sent: &[PathBuf], out: Option<PathBuf>) -> Result<()> {
     let stop = AtomicBool::new(false);
     let stage = std::sync::atomic::AtomicUsize::new(0);
     let dir = out.unwrap_or_else(|| bestofburst::ui::remover::default_dir(&queries));
-    println!("Learning the watermark from {} photos, then removing it...", thousands(queries.len()));
-    let (mark, s) = bestofburst::unmark::unmark_all(&queries, &dir, &stop, &stage, |_, _| {})?;
+    use bestofburst::inpaint;
+    let ai = if no_ai {
+        None
+    } else {
+        match inpaint::find_model() {
+            None => {
+                println!("  (AI edge clean-up off: {} not found; run scripts\\fetch-lama.ps1 to get it)", inpaint::MODEL_FILE);
+                None
+            }
+            Some(p) => {
+                println!("Loading the AI model {}...", p.display());
+                match inpaint::shared() {
+                    Ok(m) => m,
+                    Err(e) => {
+                        eprintln!("  AI edge clean-up off: {e}");
+                        None
+                    }
+                }
+            }
+        }
+    };
+    println!("Learning the watermark from {} photos, then removing it{}...", thousands(queries.len()), if ai.is_some() { " (edges cleaned with AI)" } else { "" });
+    let (mark, s) = bestofburst::unmark::unmark_all(&queries, &dir, ai, &stop, &stage, |_, _| {})?;
     println!(
         "  Mark: covers {:.1}% of the frame, {:.0}% opaque, colour {:.0} {:.0} {:.0} (learned from {} photos)",
         mark.coverage * 100.0,
@@ -521,6 +545,15 @@ fn cmd_unmark(sent: &[PathBuf], out: Option<PathBuf>) -> Result<()> {
     println!("Cleaned {} of {}  -> {}  ({})", thousands(s.written), thousands(queries.len()), s.dir.display(), elapsed(started.elapsed().as_secs()));
     if s.unmatched > 0 {
         println!("  {} did not carry the mark where the others do and were left alone.", thousands(s.unmatched));
+    }
+    if !s.ai.is_empty() {
+        let used = s.ai.iter().filter(|(_, a)| *a == inpaint::AiEdge::Used).count();
+        println!("  Edges cleaned with AI: {}; kept the classical result: {}", thousands(used), thousands(s.ai.len() - used));
+        for (name, a) in &s.ai {
+            if let inpaint::AiEdge::FellBack(why) = a {
+                println!("    {name}: {why}");
+            }
+        }
     }
     for (name, e) in s.errors.iter().take(8) {
         eprintln!("  {name}: {e}");

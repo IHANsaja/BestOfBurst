@@ -13,6 +13,7 @@ use super::app::{self, BestOfBurstApp, BgMsg, Screen};
 use super::glim::{self, Mood};
 use super::theme::{self, Btn};
 use crate::clean::{self, CleanSummary};
+use crate::inpaint;
 use crate::find;
 
 #[derive(Default)]
@@ -21,13 +22,15 @@ pub struct RemoverState {
     pub sent: Vec<PathBuf>,
     pub originals: Option<PathBuf>,
     pub running: bool,
-    /// 0 reading the originals, 1 matching, 2 removing.
+    /// 0 reading the originals (or learning the mark), 1 matching, 2 removing, 3 loading the AI model.
     pub stage: Arc<AtomicUsize>,
     pub progress: Arc<(AtomicUsize, AtomicUsize)>,
     pub stop: Arc<AtomicBool>,
     pub result: Option<CleanSummary>,
     /// The last run learned the mark from the photos (no originals).
     pub learned: bool,
+    /// The user turned the AI edge clean-up off (it is on whenever the model is installed).
+    pub ai_off: bool,
 }
 
 /// Where cleaned photos go when nothing else is said: a `watermark removed` folder beside the
@@ -49,6 +52,7 @@ pub fn start(app: &mut BestOfBurstApp, ctx: &egui::Context) {
     rs.running = true;
     rs.result = None;
     rs.learned = originals.is_none();
+    let use_ai = rs.learned && !rs.ai_off && inpaint::find_model().is_some();
     rs.stage = Arc::new(AtomicUsize::new(0));
     rs.progress = Arc::new((AtomicUsize::new(0), AtomicUsize::new(0)));
     rs.stop = Arc::new(AtomicBool::new(false));
@@ -64,7 +68,16 @@ pub fn start(app: &mut BestOfBurstApp, ctx: &egui::Context) {
             let queries = find::collect_queries(&sent);
             anyhow::ensure!(!queries.is_empty(), "There are no photos in what you chose.");
             let Some(originals) = originals else {
-                return crate::unmark::unmark_all(&queries, &default_dir(&queries), &stop, &stage, tick).map(|(_, s)| s);
+                // The model loads once (about 20 seconds) and is kept for later runs. If it
+                // cannot be used, the classical fill does the edges, as without it.
+                let ai = if use_ai {
+                    stage.store(3, Ordering::Relaxed);
+                    tick(0, 0);
+                    inpaint::shared().ok().flatten()
+                } else {
+                    None
+                };
+                return crate::unmark::unmark_all(&queries, &default_dir(&queries), ai, &stop, &stage, tick).map(|(_, s)| s);
             };
             let index = find::Index::open(&originals, &stop, tick);
             anyhow::ensure!(!index.is_empty(), "No photos could be opened in the originals folder.");
@@ -194,6 +207,17 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
                     });
                 }
             }
+            if !s.ai.is_empty() {
+                let used = s.ai.iter().filter(|(_, a)| *a == inpaint::AiEdge::Used).count();
+                for (n, label) in [(used, "edges cleaned with AI"), (s.ai.len() - used, "kept the classical edges")] {
+                    if n > 0 {
+                        ui.horizontal(|ui| {
+                            ui.label(theme::xp(theme::thousands(n), 28.0, theme::INK));
+                            ui.label(theme::mono(label, 11.0, theme::GRAPHITE));
+                        });
+                    }
+                }
+            }
             for (name, e) in s.errors.iter().take(3) {
                 ui.label(theme::body(format!("{name}: {e}"), 12.5, theme::RED));
             }
@@ -265,11 +289,26 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
                 app.remover.result = None;
             }
         });
+        if app.remover.originals.is_none() {
+            ui.add_space(14.0);
+            let model = inpaint::find_model();
+            let mut on = model.is_some() && !app.remover.ai_off;
+            let desc = if model.is_some() {
+                "Paints over the faint outline the watermark's edge can leave, on this computer, offline. Slower: about a minute or two per big photo."
+            } else {
+                "Needs the free LaMa model (about 200 MB): run scripts\\fetch-lama.ps1, or put lama_fp32.onnx in a models folder beside BestOfBurst or in %LOCALAPPDATA%\\BestOfBurst\\models."
+            };
+            let path = model.as_ref().map(|p| p.display().to_string());
+            if theme::checklist_row(ui, &mut on, model.is_none() || app.remover.running, "Clean edges with AI", desc, path.as_deref()) {
+                app.remover.ai_off = !on;
+            }
+        }
         ui.add_space(22.0);
         if app.remover.running {
             let (done, total) = (app.remover.progress.0.load(Ordering::Relaxed), app.remover.progress.1.load(Ordering::Relaxed));
             let what = match app.remover.stage.load(Ordering::Relaxed) {
                 0 if app.remover.learned => "Learning the watermark from the photos",
+                3 => "Loading the AI model",
                 0 => "Reading the originals",
                 1 => "Pairing each photo with its original",
                 _ => "Removing watermarks",

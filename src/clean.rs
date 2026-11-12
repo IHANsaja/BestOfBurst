@@ -288,6 +288,9 @@ pub struct CleanSummary {
     /// Sent file and why it could not be cleaned.
     pub errors: Vec<(String, String)>,
     pub stopped: bool,
+    /// Photo and how the AI edge clean-up went, when it was used (watermark remover without
+    /// originals only; empty otherwise).
+    pub ai: Vec<(String, crate::inpaint::AiEdge)>,
 }
 
 /// Remove the watermark from every sent photo whose original is sure (`Found`), writing

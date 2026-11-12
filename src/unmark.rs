@@ -23,6 +23,7 @@ use rayon::prelude::*;
 
 use crate::clean::{save_jpeg, CleanSummary};
 use crate::decode::{self, RgbImage};
+use crate::inpaint::{self, AiEdge, Lama};
 use crate::scan;
 
 /// Width of the frame the mark is learned in.
@@ -786,6 +787,27 @@ impl Mark {
 
     /// Take the mark off one photo, placed at `pl` (from `prepare`).
     pub fn remove_at(&self, img: &RgbImage, pl: &Placement) -> RgbImage {
+        self.remove_parts(img, pl).classical
+    }
+
+    /// Points on the mark's outline in this photo's pixels, with the outward unit normal
+    /// (x, y, nx, ny), for checking how much of the outline is left.
+    pub fn outline_points(&self, pl: &Placement) -> Vec<[f32; 4]> {
+        self.edges
+            .iter()
+            .map(|e| {
+                let (x, y) = pl.image(e[0], e[1]);
+                let (ax, ay) = pl.image(e[0] + e[2], e[1] + e[3]);
+                let (nx, ny) = (ax - x, ay - y);
+                let n = nx.hypot(ny).max(1e-6);
+                [x, y, nx / n, ny / n]
+            })
+            .collect()
+    }
+
+    /// Take the mark off one photo and keep the working parts: the mark's cover at each pixel,
+    /// the un-blended pixels before the edge fill, and the classical result.
+    pub fn remove_parts(&self, img: &RgbImage, pl: &Placement) -> Removal {
         let (w, h) = (img.width as usize, img.height as usize);
         let (fw, fh) = (self.fw as usize, self.fh as usize);
         let cover_at = |x: usize, y: usize| -> f32 {
@@ -823,6 +845,8 @@ impl Mark {
             }
         });
 
+        let unblended = out.clone();
+
         // The edge: where the mark is partly there, and a little either side (the learned edge
         // is only as sharp as the frame it was learned in), filled smoothly from both sides.
         let reach = (1.0 / (pl.sx * pl.k)).ceil() as usize + 1;
@@ -840,8 +864,21 @@ impl Mark {
                 }
             }
         }
-        RgbImage { width: img.width, height: img.height, rgb: out.iter().map(|&v| v.round().clamp(0.0, 255.0) as u8).collect() }
+        let classical = RgbImage { width: img.width, height: img.height, rgb: out.iter().map(|&v| v.round().clamp(0.0, 255.0) as u8).collect() };
+        Removal { classical, unblended, cover: s, reach }
     }
+}
+
+/// One photo with the mark taken off, and what it took (see `Mark::remove_parts`).
+pub struct Removal {
+    /// Un-blended, with the mark's edge filled smoothly from both sides.
+    pub classical: RgbImage,
+    /// Un-blended only (interleaved RGB, 0..255), before the edge fill.
+    pub unblended: Vec<f32>,
+    /// How much of each pixel the mark covers, 0..1.
+    pub cover: Vec<f32>,
+    /// How far the edge fill reached either side of the mark's edge, in pixels.
+    pub reach: usize,
 }
 
 /// Where the mark lands on one photo: the photo's width brought to the frame, centred, then
@@ -907,10 +944,42 @@ impl LnMap {
     }
 }
 
+/// Take the mark off one photo placed at `pl`; with `ai`, the leftover outline is painted
+/// over (see `inpaint`) and checked, falling back to the classical result when it still shows.
+/// `None` when stopped.
+pub fn clean_photo(mark: &Mark, img: &RgbImage, pl: &Placement, ai: Option<&Lama>, stop: &AtomicBool) -> Result<Option<(RgbImage, Option<AiEdge>)>> {
+    let parts = mark.remove_parts(img, pl);
+    let Some(lama) = ai else { return Ok(Some((parts.classical, None))) };
+    let (w, h) = (img.width as usize, img.height as usize);
+    let pts = mark.outline_points(pl);
+    let alpha_max = mark.alpha.iter().copied().fold(0.0, f32::max);
+    let trust = inpaint::trusted(&parts.cover, w, h);
+    let mut why = String::from("the outline still showed after the AI pass");
+    for extra in [0, inpaint::EXTRA_REACH] {
+        let reach = parts.reach.max(inpaint::JPEG_REACH) + extra;
+        let mask = inpaint::ai_mask(&parts.cover, w, h, alpha_max, reach);
+        let Some(painted) = inpaint::inpaint(lama, &parts.unblended, &trust, &parts.classical, &mask, stop)? else { return Ok(None) };
+        let score = inpaint::outline_score(&painted, &pts, (reach + 6) as f32);
+        if !score.visible() {
+            return Ok(Some((painted, Some(AiEdge::Used))));
+        }
+        why = format!("the outline still showed after the AI pass ({:.1} against {:.1} nearby)", score.at_mark, score.nearby);
+    }
+    Ok(Some((parts.classical, Some(AiEdge::FellBack(why)))))
+}
+
 /// Learn the mark from `paths`, then take it off each photo that carries it, writing
-/// `<name>.jpg` into `dir`. The photos themselves are only read. `stage` is set to 0 while
-/// learning and 2 while removing; `progress` gets (done, total) for each.
-pub fn unmark_all(paths: &[PathBuf], dir: &Path, stop: &AtomicBool, stage: &AtomicUsize, progress: impl Fn(usize, usize) + Sync) -> Result<(Mark, CleanSummary)> {
+/// `<name>.jpg` into `dir`. The photos themselves are only read. With `ai`, the mark's edge is
+/// cleaned up by the inpainting model (see `inpaint`). `stage` is set to 0 while learning and 2
+/// while removing; `progress` gets (done, total) for each.
+pub fn unmark_all(
+    paths: &[PathBuf],
+    dir: &Path,
+    ai: Option<&Lama>,
+    stop: &AtomicBool,
+    stage: &AtomicUsize,
+    progress: impl Fn(usize, usize) + Sync,
+) -> Result<(Mark, CleanSummary)> {
     let dir_l = dir.to_string_lossy().to_lowercase();
     let paths: Vec<PathBuf> = paths.iter().filter(|p| !p.to_string_lossy().to_lowercase().starts_with(&dir_l)).cloned().collect();
     stage.store(0, Ordering::Relaxed);
@@ -919,9 +988,11 @@ pub fn unmark_all(paths: &[PathBuf], dir: &Path, stop: &AtomicBool, stage: &Atom
     progress(0, paths.len());
     std::fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
     let done = AtomicUsize::new(0);
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(2).build().context("cannot start worker threads")?;
-    // Some(Ok(true)) written, Some(Ok(false)) no mark there.
-    let results: Vec<Option<(String, Result<bool>)>> = pool.install(|| {
+    // Two photos at a time; one when the AI runs, as its tiles already fill the processor.
+    let pool = rayon::ThreadPoolBuilder::new().num_threads(if ai.is_some() { 1 } else { 2 }).build().context("cannot start worker threads")?;
+    // Some(Ok(Some(..))) written (with how the AI went), Some(Ok(None)) no mark there.
+    type Outcome = Result<Option<Option<AiEdge>>>;
+    let results: Vec<Option<(String, Outcome)>> = pool.install(|| {
         paths
             .par_iter()
             .map(|p| {
@@ -929,16 +1000,16 @@ pub fn unmark_all(paths: &[PathBuf], dir: &Path, stop: &AtomicBool, stage: &Atom
                     return None;
                 }
                 let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<bool> {
+                let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Outcome {
                     let img = open(p)?;
                     let (pl, presence) = mark.prepare(&img);
                     if presence.is_some_and(|v| v < 0.45) {
-                        return Ok(false);
+                        return Ok(None);
                     }
-                    let clean = mark.remove_at(&img, &pl);
+                    let Some((clean, how)) = clean_photo(&mark, &img, &pl, ai, stop)? else { bail!("stopped") };
                     let stem = Path::new(&name).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "photo".into());
                     save_jpeg(&clean, &dir.join(format!("{stem}.jpg")))?;
-                    Ok(true)
+                    Ok(Some(how))
                 }))
                 .unwrap_or_else(|_| Err(anyhow::anyhow!("the photo could not be processed")));
                 progress(done.fetch_add(1, Ordering::Relaxed) + 1, paths.len());
@@ -949,8 +1020,14 @@ pub fn unmark_all(paths: &[PathBuf], dir: &Path, stop: &AtomicBool, stage: &Atom
     let mut s = CleanSummary { dir: dir.to_path_buf(), stopped: stop.load(Ordering::Relaxed), ..Default::default() };
     for (name, r) in results.into_iter().flatten() {
         match r {
-            Ok(true) => s.written += 1,
-            Ok(false) => s.unmatched += 1,
+            Ok(Some(how)) => {
+                s.written += 1;
+                if let Some(how) = how {
+                    s.ai.push((name, how));
+                }
+            }
+            Ok(None) => s.unmatched += 1,
+            Err(_) if s.stopped => {}
             Err(e) => s.errors.push((name, format!("{e:#}"))),
         }
     }
