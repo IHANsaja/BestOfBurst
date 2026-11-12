@@ -55,7 +55,7 @@ struct Models {
 
 fn load(bytes: &[u8]) -> Result<Plan> {
     let model = tract_tflite::tflite().model_for_read(&mut std::io::Cursor::new(bytes))?;
-    Ok(model.into_optimized()?.into_runnable()?)
+    model.into_optimized()?.into_runnable()
 }
 
 fn models() -> Result<&'static Models, String> {
@@ -368,7 +368,7 @@ fn mesh_face(m: &Models, levels: &[Level], d: &Det) -> Result<Option<Face>> {
     for o in res.iter() {
         let s = o.try_as_plain_ram()?.as_slice::<f32>()?;
         if s.len() == 478 * 3 {
-            points = Some(s.chunks_exact(3).map(|p| [p[0], p[1]]).collect());
+            points = Some(s.as_chunks::<3>().0.iter().map(|p| [p[0], p[1]]).collect());
         } else if s.len() == 1 && presence.is_none() {
             presence = Some(1.0 / (1.0 + (-s[0].clamp(-50.0, 50.0)).exp()));
         }

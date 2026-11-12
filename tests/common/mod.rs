@@ -44,7 +44,7 @@ pub fn from_luma(w: u32, h: u32, f: impl Fn(u32, u32) -> f64) -> RgbImage {
 }
 
 pub fn checkerboard(w: u32, h: u32, cell: u32) -> RgbImage {
-    from_luma(w, h, |x, y| if ((x / cell) + (y / cell)) % 2 == 0 { 30.0 } else { 220.0 })
+    from_luma(w, h, |x, y| if ((x / cell) + (y / cell)).is_multiple_of(2) { 30.0 } else { 220.0 })
 }
 
 /// A smooth random field: random values on a coarse grid, bilinearly interpolated, plus colour.
@@ -60,11 +60,9 @@ pub fn scene(w: u32, h: u32, seed: u64) -> RgbImage {
             let fy = y as f64 / (h - 1) as f64 * (gh - 1) as f64;
             let (x0, y0) = ((fx as usize).min(gw - 2), (fy as usize).min(gh - 2));
             let (tx, ty) = (fx - x0 as f64, fy - y0 as f64);
+            let (a, b, d, e) = (grid[y0 * gw + x0], grid[y0 * gw + x0 + 1], grid[(y0 + 1) * gw + x0], grid[(y0 + 1) * gw + x0 + 1]);
             for c in 0..3 {
-                let v = grid[y0 * gw + x0][c] * (1.0 - tx) * (1.0 - ty)
-                    + grid[y0 * gw + x0 + 1][c] * tx * (1.0 - ty)
-                    + grid[(y0 + 1) * gw + x0][c] * (1.0 - tx) * ty
-                    + grid[(y0 + 1) * gw + x0 + 1][c] * tx * ty;
+                let v = a[c] * (1.0 - tx) * (1.0 - ty) + b[c] * tx * (1.0 - ty) + d[c] * (1.0 - tx) * ty + e[c] * tx * ty;
                 rgb.push(v.round().clamp(0.0, 255.0) as u8);
             }
         }

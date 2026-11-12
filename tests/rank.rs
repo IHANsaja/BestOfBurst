@@ -321,7 +321,7 @@ fn make_shoot(dir: &std::path::Path) {
     std::fs::write(dir.join("notes.xmp"), vec![b'x'; 20_000]).unwrap();
     std::fs::write(dir.join("broken.jpg"), {
         let mut v = vec![0xFF, 0xD8, 0xFF, 0xE0];
-        v.extend(std::iter::repeat(0x11).take(20_000));
+        v.extend(std::iter::repeat_n(0x11, 20_000));
         v
     })
     .unwrap();

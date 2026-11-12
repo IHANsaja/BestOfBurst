@@ -57,12 +57,18 @@ pub fn tile_sums(img: &RgbImage) -> Option<TileSums> {
     if w < 3 || h < 3 {
         return None;
     }
-    let luma: Vec<f32> =
-        img.rgb.chunks_exact(3).take(w * h).map(|p| LUMA[0] * p[0] as f32 + LUMA[1] * p[1] as f32 + LUMA[2] * p[2] as f32).collect();
+    let luma: Vec<f32> = img
+        .rgb
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .take(w * h)
+        .map(|p| LUMA[0] * p[0] as f32 + LUMA[1] * p[1] as f32 + LUMA[2] * p[2] as f32)
+        .collect();
 
     // Clipping over all pixels
     let (mut lo, mut hi) = (0u64, 0u64);
-    for (i, p) in img.rgb.chunks_exact(3).take(w * h).enumerate() {
+    for (i, p) in img.rgb.as_chunks::<3>().0.iter().take(w * h).enumerate() {
         if luma[i] < 4.5 {
             lo += 1;
         }

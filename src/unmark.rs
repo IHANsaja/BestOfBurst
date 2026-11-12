@@ -101,7 +101,7 @@ fn evenly(paths: &[PathBuf], n: usize) -> Vec<PathBuf> {
 fn morph(m: &[bool], w: usize, h: usize, grow: bool) -> Vec<bool> {
     let mut out = vec![false; w * h];
     out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
-        for x in 0..w {
+        for (x, o) in row.iter_mut().enumerate() {
             let mut any = false;
             let mut all = true;
             for yy in y.saturating_sub(1)..(y + 2).min(h) {
@@ -111,7 +111,7 @@ fn morph(m: &[bool], w: usize, h: usize, grow: bool) -> Vec<bool> {
                     all &= v;
                 }
             }
-            row[x] = if grow { any } else { all };
+            *o = if grow { any } else { all };
         }
     });
     out
@@ -311,7 +311,7 @@ fn smooth(u: &mut [f32], rhs: &[f32], w: usize, h: usize, sweeps: usize) {
 fn residual(u: &[f32], rhs: &[f32], w: usize, h: usize) -> Vec<f32> {
     let mut r = vec![0f32; w * h];
     r.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
-        for x in 0..w {
+        for (x, o) in row.iter_mut().enumerate() {
             let i = y * w + x;
             let mut l = 0f32;
             if x > 0 {
@@ -326,7 +326,7 @@ fn residual(u: &[f32], rhs: &[f32], w: usize, h: usize) -> Vec<f32> {
             if y + 1 < h {
                 l += u[i + w] - u[i];
             }
-            row[x] = rhs[i] - l;
+            *o = rhs[i] - l;
         }
     });
     r
@@ -442,7 +442,9 @@ impl Mark {
                         let img = to_frame(open(p)?, fw)?;
                         let grey =
                             img.rgb
-                                .chunks_exact(3)
+                                .as_chunks::<3>()
+                                .0
+                                .iter()
                                 .map(|c| {
                                     if c[0].max(c[1]).max(c[2]) >= SATURATED {
                                         255

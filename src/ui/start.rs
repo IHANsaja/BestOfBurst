@@ -8,6 +8,8 @@ use super::marks;
 use super::theme;
 
 /// One tool card: number, title, what it does, and a call to action. Returns true when chosen.
+// Each argument is one piece of what the card shows; a struct would only rename them.
+#[allow(clippy::too_many_arguments)]
 fn card(ui: &mut Ui, rect: Rect, no: &str, title: &str, text: &str, action: &str, key: &str, primary: bool) -> bool {
     let resp = ui.interact(rect, ui.scope_id().with(no), Sense::click());
     resp.widget_info(|| WidgetInfo::labeled(Role::Button, true, title));

@@ -74,7 +74,7 @@ pub fn decode_jpeg_bytes(data: &[u8]) -> Result<RgbImage> {
     let pixels = dec.decode().map_err(|e| anyhow!("jpeg: {e:?}"))?;
     let (w, h) = (info.width as u32, info.height as u32);
     let n = (w as usize) * (h as usize);
-    let channels = if n == 0 { 0 } else { pixels.len() / n };
+    let channels = pixels.len().checked_div(n).unwrap_or(0);
     match channels {
         3 => RgbImage::new(w, h, pixels),
         1 => RgbImage::new(w, h, pixels.iter().flat_map(|&v| [v, v, v]).collect()),

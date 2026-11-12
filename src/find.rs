@@ -207,7 +207,7 @@ pub fn luma_grid(img: &RgbImage, n: usize) -> Vec<f32> {
             let mut s = 0f32;
             for y in y0..y1 {
                 let row = &img.rgb[(y * w + x0) * 3..(y * w + x1) * 3];
-                for p in row.chunks_exact(3) {
+                for p in row.as_chunks::<3>().0 {
                     s += LUMA[0] * p[0] as f32 + LUMA[1] * p[1] as f32 + LUMA[2] * p[2] as f32;
                 }
             }
@@ -308,7 +308,7 @@ fn line_fit(q: &[f32], o: &[f32], use_: &[bool]) -> (f32, f32) {
 /// orientation. Cells where `mask` is true (the watermark) are left out.
 pub fn compare(q: &[f32], o: &[f32], mask: Option<&[bool]>) -> Fit {
     let n = q.len();
-    let keep: Vec<bool> = (0..n).map(|i| mask.map_or(true, |m| !m[i])).collect();
+    let keep: Vec<bool> = (0..n).map(|i| mask.is_none_or(|m| !m[i])).collect();
     let kept = keep.iter().filter(|k| **k).count();
     if kept < n / 8 {
         return Fit { similarity: 0.0, diff: f32::MAX, residual: vec![0.0; n] };
@@ -371,7 +371,9 @@ impl Luma {
         let (w, h) = (img.width as usize, img.height as usize);
         let v = img
             .rgb
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .take(w * h)
             .map(|p| (LUMA[0] * p[0] as f32 + LUMA[1] * p[1] as f32 + LUMA[2] * p[2] as f32).round() as u8)
             .collect();
@@ -891,7 +893,10 @@ pub fn find_originals(
     }
 
     // Pass 1: open, shortlist, compare.
-    let first: Vec<Option<Result<(Probe, Option<PathBuf>), String>>> = queries
+    // Each sent photo opened and compared (or why it could not be), and each one rated.
+    type Opened = Result<(Probe, Option<PathBuf>), String>;
+    type Rated = (Vec<(Candidate, Vec<f32>)>, Verdict, Crops);
+    let first: Vec<Option<Opened>> = queries
         .par_iter()
         .map(|q| {
             if stop.load(Ordering::Relaxed) {
@@ -922,7 +927,7 @@ pub fn find_originals(
         .collect();
 
     let mut report = FindReport { stopped: stop.load(Ordering::Relaxed), ..Default::default() };
-    let rated: Vec<Option<(Vec<(Candidate, Vec<f32>)>, Verdict, Crops)>> = first
+    let rated: Vec<Option<Rated>> = first
         .par_iter()
         .zip(queries)
         .map(|(f, q)| match f {

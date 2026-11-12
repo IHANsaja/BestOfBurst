@@ -1,6 +1,6 @@
 //! 5. The marks: hand-drawn keeper circle, maybe wave, set-aside cross and the close-call "?".
-//! Paths come from DESIGN.md; they are stretched to the target rect (preserveAspectRatio="none")
-//! and can be drawn partially for the 350-500 ms draw-on at the moment of a decision.
+//!    Paths come from DESIGN.md; they are stretched to the target rect (preserveAspectRatio="none")
+//!    and can be drawn partially for the 350-500 ms draw-on at the moment of a decision.
 
 use eframe::egui::{pos2, vec2, Align2, Color32, Pos2, Rect, Shape, Stroke, Ui};
 

@@ -123,13 +123,13 @@ fn tone_curves(original: &RgbImage, preview: &RgbImage) -> [[u8; 256]; 3] {
                 blocks.push((v, wsum, a.2 + b.2));
             }
         }
-        let flat: Vec<f64> = blocks.iter().flat_map(|b| std::iter::repeat(b.0).take(b.2)).collect();
+        let flat: Vec<f64> = blocks.iter().flat_map(|b| std::iter::repeat_n(b.0, b.2)).collect();
         // Values the photo never uses before its first known one start from that one.
         let first = (0..256).find(|&o| med[o].is_some()).unwrap_or(0);
-        for o in 0..256usize {
+        for (o, v) in curves[c].iter_mut().enumerate() {
             let (a, b) = (o.saturating_sub(3).max(first.min(o)), (o + 4).min(256));
             let mean = (a..b).map(|k| flat[k.max(first)]).sum::<f64>() / (b - a) as f64;
-            curves[c][o] = mean.round().clamp(0.0, 255.0) as u8;
+            *v = mean.round().clamp(0.0, 255.0) as u8;
         }
     }
     curves

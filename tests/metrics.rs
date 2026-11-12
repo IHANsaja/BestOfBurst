@@ -68,13 +68,13 @@ fn raw_path_picks_baseline_not_lossless() {
     let preview = encode_jpeg(&scene(1200, 800, 3), 85);
     let mut data = Vec::new();
     data.extend_from_slice(b"II*\0\x08\0\0\0");
-    data.extend(std::iter::repeat(0xAB).take(5000));
+    data.extend(std::iter::repeat_n(0xAB, 5000));
     // Fake lossless (C3) frame claiming 6000 x 4000: raw sensor data, must be skipped.
     data.extend_from_slice(&[0xFF, 0xD8, 0xFF, 0xC3, 0x00, 0x0B, 0x0C, 0x0F, 0xA0, 0x17, 0x70, 0x01, 0x01, 0x11, 0x00]);
-    data.extend(std::iter::repeat(0x55).take(3000));
+    data.extend(std::iter::repeat_n(0x55, 3000));
     let at = data.len();
     data.extend_from_slice(&preview);
-    data.extend(std::iter::repeat(0x00).take(1000));
+    data.extend(std::iter::repeat_n(0x00, 1000));
 
     let cands = raw::jpeg_candidates(&data);
     assert_eq!(cands.len(), 1);
@@ -146,7 +146,7 @@ fn wic_formats_decode_or_report_missing_codec() {
     let dir = scratch("wic");
     let p = dir.join("x.heic");
     let mut data = b"\0\0\0\x18ftypheic\0\0\0\0mif1heic".to_vec();
-    data.extend(std::iter::repeat(0).take(20000));
+    data.extend(std::iter::repeat_n(0, 20000));
     std::fs::write(&p, &data).unwrap();
     assert_eq!(scan::detect_file(&p).unwrap(), Some(Format::Heif));
     match decode::decode_full(&p, Format::Heif) {

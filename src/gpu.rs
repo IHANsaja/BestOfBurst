@@ -482,7 +482,7 @@ impl Gpu {
                 hc.counts[r][c] = cell_f[(r * 9 + c) * 2 + 1] as f64;
             }
         }
-        let rgb: Vec<u8> = thumb_raw.chunks_exact(4).take((tw * th) as usize).flat_map(|p| [p[0], p[1], p[2]]).collect();
+        let rgb: Vec<u8> = thumb_raw.as_chunks::<4>().0.iter().take((tw * th) as usize).flat_map(|p| [p[0], p[1], p[2]]).collect();
         Ok(GpuOut {
             sums,
             cells: hc,
@@ -516,6 +516,6 @@ impl Gpu {
     }
 
     fn read_f32(&self, buf: &wgpu::Buffer) -> Result<Vec<f32>> {
-        Ok(self.read_bytes(buf)?.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect())
+        Ok(self.read_bytes(buf)?.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect())
     }
 }

@@ -341,7 +341,7 @@ pub fn group_entries(e: &mut [Entry]) {
                     continue;
                 }
                 let d = hamming(e[i].dhash, e[g.first].dhash);
-                if d <= LOOKBACK_HASH && best.map_or(true, |(bd, _)| d < bd) {
+                if d <= LOOKBACK_HASH && best.is_none_or(|(bd, _)| d < bd) {
                     best = Some((d, gi));
                 }
             }
@@ -360,10 +360,8 @@ pub fn group_entries(e: &mut [Entry]) {
         e[i].group = gi as u64;
         prev = Some(i);
     }
-    let mut next = groups.len() as u64;
-    for x in e.iter_mut().filter(|x| !x.ok) {
-        x.group = next;
-        next += 1;
+    for (x, g) in e.iter_mut().filter(|x| !x.ok).zip(groups.len() as u64..) {
+        x.group = g;
     }
     let mut sizes: BTreeMap<u64, usize> = BTreeMap::new();
     for x in e.iter() {
@@ -581,8 +579,8 @@ pub fn subject_center(group: &[&Entry]) -> [f32; 2] {
         return [0.5, 0.5];
     }
     let (mut sx, mut sy, mut n) = (0.0f32, 0.0f32, 0.0f32);
-    for t in 0..64 {
-        if max_t[t] >= 0.5 * peak {
+    for (t, &m) in max_t.iter().enumerate() {
+        if m >= 0.5 * peak {
             sx += (t % 8) as f32 + 0.5;
             sy += (t / 8) as f32 + 0.5;
             n += 1.0;

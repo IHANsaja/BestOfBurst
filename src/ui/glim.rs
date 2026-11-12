@@ -1,5 +1,5 @@
 //! 8. Glim: a small lens-hood body with a camera-aperture eye, drawn as ink on paper.
-//! Glim reacts and never blocks: no modals, no sound, no focus stealing.
+//!    Glim reacts and never blocks: no modals, no sound, no focus stealing.
 
 use std::f32::consts::TAU;
 
@@ -105,10 +105,10 @@ pub fn paint(ui: &Ui, rect: Rect, mood: Mood, night: bool, time: f64, reduced: b
                 eye + vec2(a.cos(), a.sin()) * pupil
             })
             .collect();
-        for k in 0..6 {
+        for (k, &p) in hex.iter().enumerate() {
             let a = k as f32 / 6.0 * TAU + 0.3 + 0.75;
             let outer = eye + vec2(a.cos(), a.sin()) * r * 0.97;
-            painter.line_segment([hex[k], outer], Stroke::new(w * 0.55, c.ink));
+            painter.line_segment([p, outer], Stroke::new(w * 0.55, c.ink));
         }
         painter.add(Shape::closed_line(hex, Stroke::new(w * 0.8, c.ink)));
         painter.circle_filled(eye, (1.8 * s).max(1.5), c.red);

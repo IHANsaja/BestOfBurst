@@ -12,7 +12,7 @@ pub fn jpeg_candidates(data: &[u8]) -> Vec<&[u8]> {
             }
         }
     }
-    found.sort_by(|a, b| b.1.cmp(&a.1));
+    found.sort_by_key(|f| std::cmp::Reverse(f.1));
     found.into_iter().map(|(s, _)| s).collect()
 }
 
@@ -30,13 +30,13 @@ pub fn jpeg_dimensions(d: &[u8]) -> Option<(u16, u16)> {
             m = *d.get(i + 1)?;
         }
         match m {
-            0xC0 | 0xC1 | 0xC2 => {
+            0xC0..=0xC2 => {
                 let h = u16::from_be_bytes([*d.get(i + 5)?, *d.get(i + 6)?]);
                 let w = u16::from_be_bytes([*d.get(i + 7)?, *d.get(i + 8)?]);
                 return (w > 0 && h > 0).then_some((w, h));
             }
             0xC3 | 0xC5..=0xC7 | 0xC9..=0xCB | 0xCD..=0xCF => return None,
-            0xD8 | 0xD9 | 0xDA => return None,
+            0xD8..=0xDA => return None,
             _ => {
                 let len = u16::from_be_bytes([*d.get(i + 2)?, *d.get(i + 3)?]) as usize;
                 if len < 2 {

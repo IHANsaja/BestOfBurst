@@ -141,7 +141,7 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         let reasons = {
             let mut v: Vec<(String, usize)> =
                 s.reject_reasons.iter().map(|(k, n)| (super::review::reason_words(k).to_lowercase(), *n)).collect();
-            v.sort_by(|a, b| b.1.cmp(&a.1));
+            v.sort_by_key(|a| std::cmp::Reverse(a.1));
             v.iter().take(3).map(|(k, n)| format!("{k} {n}")).collect::<Vec<_>>().join(" · ")
         };
         let closes = rv.close_call_groups().len();

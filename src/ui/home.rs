@@ -87,8 +87,7 @@ fn keep_field(ui: &mut egui::Ui, text: &mut String) {
         ui.spacing_mut().item_spacing.x = 6.0;
         ui.visuals_mut().override_text_color = Some(theme::TABLE);
         for pick in ["5%", "10%", "20%", "100", "300"] {
-            let label = if pick.ends_with('%') { pick.to_string() } else { format!("{pick}") };
-            if theme::button(ui, &label, None, theme::Btn::MonoSmall, 32.0, Some(56.0), true).clicked() {
+            if theme::button(ui, pick, None, theme::Btn::MonoSmall, 32.0, Some(56.0), true).clicked() {
                 *text = pick.to_string();
             }
         }
