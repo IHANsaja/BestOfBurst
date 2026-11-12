@@ -73,6 +73,14 @@ pub fn logical() -> usize {
     std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1)
 }
 
+/// Memory free for new work right now, in MB (GlobalMemoryStatusEx).
+pub fn available_memory_mb() -> Option<u64> {
+    use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+    let mut s = MEMORYSTATUSEX { dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32, ..Default::default() };
+    // SAFETY: `s` is a properly sized MEMORYSTATUSEX with dwLength set, as the call requires.
+    unsafe { GlobalMemoryStatusEx(&mut s).ok().map(|_| s.ullAvailPhys / (1024 * 1024)) }
+}
+
 /// Physical cores from GetLogicalProcessorInformation.
 pub fn physical_cores() -> usize {
     use windows::Win32::System::SystemInformation::{

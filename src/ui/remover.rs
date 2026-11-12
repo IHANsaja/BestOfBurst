@@ -307,7 +307,7 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
             let model = inpaint::find_model();
             let mut on = model.is_some() && !app.remover.ai_off;
             let desc = if model.is_some() {
-                "Paints over the faint outline the watermark's edge can leave, on this computer, offline. Slower: about a minute or two per big photo."
+                "Paints over the faint outline the watermark's edge can leave, on this computer, offline. Much slower: several minutes for each big photo."
             } else {
                 "Needs the free LaMa model (about 200 MB): run scripts\\fetch-lama.ps1, or put lama_fp32.onnx in a models folder beside BestOfBurst or in %LOCALAPPDATA%\\BestOfBurst\\models."
             };

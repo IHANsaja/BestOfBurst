@@ -59,8 +59,18 @@ pub const JPEG_REACH: usize = if JPEG_BLOCK > MIN_JPEG_REACH { JPEG_BLOCK } else
 pub const STRONG: f32 = 0.6;
 /// The painted pixels fade into the classical result over this many pixels at the band's rim.
 const FEATHER: usize = 3;
-/// Tiles run at the same time (each holds about 300 MB while it runs).
-const TILE_THREADS: usize = 4;
+/// At most this many tiles run at the same time.
+const MAX_TILE_THREADS: usize = 4;
+/// Memory one running tile needs, in MB (measured: about 300, plus headroom).
+const TILE_MB: u64 = 450;
+
+/// How many tiles to run at once: one per physical core, up to `MAX_TILE_THREADS`, and only as
+/// many as free memory holds. More than memory allows makes Windows page the model out, and
+/// every tile then runs many times slower.
+fn tile_threads() -> usize {
+    let by_memory = crate::sysmon::available_memory_mb().map_or(MAX_TILE_THREADS, |mb| (mb / TILE_MB) as usize);
+    by_memory.min(crate::sysmon::physical_cores()).clamp(1, MAX_TILE_THREADS)
+}
 /// How much further the band grows on the second try when the outline still shows.
 pub const EXTRA_REACH: usize = JPEG_BLOCK;
 
@@ -443,7 +453,7 @@ pub fn inpaint(
     if tiles.is_empty() {
         return Ok(Some(base.clone()));
     }
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(TILE_THREADS).build().context("cannot start worker threads")?;
+    let pool = rayon::ThreadPoolBuilder::new().num_threads(tile_threads()).build().context("cannot start worker threads")?;
     let done: Vec<Option<Result<Painted>>> = pool.install(|| {
         tiles
             .par_iter()
