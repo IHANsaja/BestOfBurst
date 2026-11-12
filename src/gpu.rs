@@ -240,11 +240,9 @@ static GPU: OnceLock<Result<Arc<Gpu>, String>> = OnceLock::new();
 
 /// The shared GPU, created on first use. Err carries a plain reason ("no compatible GPU").
 pub fn get() -> Result<Arc<Gpu>, String> {
-    GPU.get_or_init(|| {
-        match std::panic::catch_unwind(init) {
-            Ok(r) => r.map(Arc::new),
-            Err(_) => Err("the graphics driver crashed while starting".into()),
-        }
+    GPU.get_or_init(|| match std::panic::catch_unwind(init) {
+        Ok(r) => r.map(Arc::new),
+        Err(_) => Err("the graphics driver crashed while starting".into()),
     })
     .clone()
 }
@@ -342,20 +340,7 @@ struct Params {
 impl Params {
     fn bytes(&self) -> [u8; 48] {
         let mut b = [0u8; 48];
-        let words: [u32; 12] = [
-            self.sw,
-            self.sh,
-            self.dw,
-            self.dh,
-            self.src_rgba,
-            0,
-            0,
-            0,
-            self.scale.to_bits(),
-            0,
-            0,
-            0,
-        ];
+        let words: [u32; 12] = [self.sw, self.sh, self.dw, self.dh, self.src_rgba, 0, 0, 0, self.scale.to_bits(), 0, 0, 0];
         for (k, w) in words.iter().enumerate() {
             b[k * 4..k * 4 + 4].copy_from_slice(&w.to_le_bytes());
         }
@@ -390,10 +375,8 @@ impl Gpu {
 
     fn bind(&self, pipe: &wgpu::ComputePipeline, entries: &[(u32, &wgpu::Buffer)]) -> wgpu::BindGroup {
         let layout = pipe.get_bind_group_layout(0);
-        let e: Vec<wgpu::BindGroupEntry> = entries
-            .iter()
-            .map(|(b, buf)| wgpu::BindGroupEntry { binding: *b, resource: buf.as_entire_binding() })
-            .collect();
+        let e: Vec<wgpu::BindGroupEntry> =
+            entries.iter().map(|(b, buf)| wgpu::BindGroupEntry { binding: *b, resource: buf.as_entire_binding() }).collect();
         self.device.create_bind_group(&wgpu::BindGroupDescriptor { label: None, layout: &layout, entries: &e })
     }
 
@@ -430,8 +413,10 @@ impl Gpu {
         let p_h = self.uniform(Params { sw, sh, dw, dh, src_rgba: 0, pad: [0; 3], scale: sw as f32 / dw as f32, pad2: [0.0; 3] });
         let p_v = self.uniform(Params { sw: dw, sh, dw, dh, src_rgba: 1, pad: [0; 3], scale: sh as f32 / dh as f32, pad2: [0.0; 3] });
         let p_a = self.uniform(Params { sw: dw, sh: dh, dw, dh, src_rgba: 1, pad: [0; 3], scale: 1.0, pad2: [0.0; 3] });
-        let p_th = self.uniform(Params { sw: dw, sh: dh, dw: tw, dh, src_rgba: 1, pad: [0; 3], scale: dw as f32 / tw as f32, pad2: [0.0; 3] });
-        let p_tv = self.uniform(Params { sw: tw, sh: dh, dw: tw, dh: th, src_rgba: 1, pad: [0; 3], scale: dh as f32 / th as f32, pad2: [0.0; 3] });
+        let p_th =
+            self.uniform(Params { sw: dw, sh: dh, dw: tw, dh, src_rgba: 1, pad: [0; 3], scale: dw as f32 / tw as f32, pad2: [0.0; 3] });
+        let p_tv =
+            self.uniform(Params { sw: tw, sh: dh, dw: tw, dh: th, src_rgba: 1, pad: [0; 3], scale: dh as f32 / th as f32, pad2: [0.0; 3] });
 
         let bg_h = self.bind(&self.hresize, &[(0, &p_h), (1, &src), (2, &mid)]);
         let bg_v = self.bind(&self.vresize, &[(0, &p_v), (1, &mid), (2, &out)]);
@@ -523,9 +508,7 @@ impl Gpu {
         slice.map_async(wgpu::MapMode::Read, move |r| {
             let _ = tx.send(r);
         });
-        self.device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .map_err(|e| anyhow!("GPU did not finish: {e}"))?;
+        self.device.poll(wgpu::PollType::wait_indefinitely()).map_err(|e| anyhow!("GPU did not finish: {e}"))?;
         rx.recv().map_err(|_| anyhow!("GPU readback lost"))?.map_err(|e| anyhow!("GPU readback failed: {e}"))?;
         let data = slice.get_mapped_range().map_err(|e| anyhow!("GPU readback failed: {e:?}"))?.to_vec();
         buf.unmap();

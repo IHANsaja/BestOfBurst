@@ -38,15 +38,9 @@ pub fn decode_wic(path: &Path) -> anyhow::Result<RgbImage> {
     // SAFETY: standard WIC call sequence on interfaces owned by this function; the pixel
     // buffer is sized to stride * height before CopyPixels writes into it.
     unsafe {
-        let factory: IWICImagingFactory =
-            CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?;
+        let factory: IWICImagingFactory = CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?;
         let decoder = factory
-            .CreateDecoderFromFilename(
-                &HSTRING::from(path.as_os_str()),
-                None,
-                GENERIC_READ,
-                WICDecodeMetadataCacheOnDemand,
-            )
+            .CreateDecoderFromFilename(&HSTRING::from(path.as_os_str()), None, GENERIC_READ, WICDecodeMetadataCacheOnDemand)
             .map_err(wic_error)?;
         let frame = decoder.GetFrame(0).map_err(wic_error)?;
         let (mut w, mut h) = (0u32, 0u32);
@@ -55,15 +49,8 @@ pub fn decode_wic(path: &Path) -> anyhow::Result<RgbImage> {
             anyhow::bail!("wic: empty image");
         }
         let conv = factory.CreateFormatConverter()?;
-        conv.Initialize(
-            &frame,
-            &GUID_WICPixelFormat24bppRGB,
-            WICBitmapDitherTypeNone,
-            None,
-            0.0,
-            WICBitmapPaletteTypeCustom,
-        )
-        .map_err(wic_error)?;
+        conv.Initialize(&frame, &GUID_WICPixelFormat24bppRGB, WICBitmapDitherTypeNone, None, 0.0, WICBitmapPaletteTypeCustom)
+            .map_err(wic_error)?;
         let stride = w * 3;
         let mut rgb = vec![0u8; stride as usize * h as usize];
         conv.CopyPixels(std::ptr::null(), stride, &mut rgb).map_err(wic_error)?;

@@ -4,8 +4,8 @@
 use std::sync::Arc;
 
 use eframe::egui::{
-    self, pos2, vec2, Align2, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId,
-    Pos2, Rect, Response, RichText, Role, Sense, Shadow, Stroke, StrokeKind, Ui, WidgetInfo,
+    self, pos2, vec2, Align2, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Pos2, Rect, Response, RichText, Role,
+    Sense, Shadow, Stroke, StrokeKind, Ui, WidgetInfo,
 };
 
 // 2.1 Core palette
@@ -105,7 +105,11 @@ pub fn install_fonts(ctx: &egui::Context) {
     add("Archivo-Expanded-ExtraBold", include_bytes!("../../assets/fonts/Archivo-Expanded-ExtraBold.ttf"), FontFamily::Name(XP.into()));
     add("Archivo-Expanded-Black", include_bytes!("../../assets/fonts/Archivo-Expanded-Black.ttf"), FontFamily::Name(XP_BLACK.into()));
     add("MartianMono-Condensed-Medium", include_bytes!("../../assets/fonts/MartianMono-Condensed-Medium.ttf"), FontFamily::Monospace);
-    add("MartianMono-Condensed-SemiBold", include_bytes!("../../assets/fonts/MartianMono-Condensed-SemiBold.ttf"), FontFamily::Name(MONO_SEMI.into()));
+    add(
+        "MartianMono-Condensed-SemiBold",
+        include_bytes!("../../assets/fonts/MartianMono-Condensed-SemiBold.ttf"),
+        FontFamily::Name(MONO_SEMI.into()),
+    );
     ctx.set_fonts(defs);
 }
 
@@ -133,18 +137,16 @@ pub fn f_mono_semi(size: f32) -> FontId {
 
 /// Expanded uppercase display/label text.
 pub fn xp(text: impl AsRef<str>, size: f32, color: Color32) -> RichText {
-    RichText::new(text.as_ref().to_uppercase())
-        .font(f_xp(size))
-        .color(color)
-        .extra_letter_spacing(if size >= 40.0 { -0.025 * size } else { 0.03 * size })
+    RichText::new(text.as_ref().to_uppercase()).font(f_xp(size)).color(color).extra_letter_spacing(if size >= 40.0 {
+        -0.025 * size
+    } else {
+        0.03 * size
+    })
 }
 
 /// Monospace metadata: uppercase, +0.08em.
 pub fn mono(text: impl AsRef<str>, size: f32, color: Color32) -> RichText {
-    RichText::new(text.as_ref().to_uppercase())
-        .font(f_mono(size))
-        .color(color)
-        .extra_letter_spacing(0.08 * size)
+    RichText::new(text.as_ref().to_uppercase()).font(f_mono(size)).color(color).extra_letter_spacing(0.08 * size)
 }
 
 pub fn body(text: impl Into<String>, size: f32, color: Color32) -> RichText {
@@ -162,7 +164,11 @@ pub fn galley(ui: &Ui, text: &str, font: FontId, color: Color32, spacing: f32) -
 pub fn fit_size(ui: &Ui, text: &str, max: f32, width: f32, black: bool) -> f32 {
     let font = if black { f_xp_black(max) } else { f_xp(max) };
     let w = galley(ui, text, font, INK, -0.03 * max).size().x;
-    if w <= width { max } else { (max * width / w).floor().max(12.0) }
+    if w <= width {
+        max
+    } else {
+        (max * width / w).floor().max(12.0)
+    }
 }
 
 pub fn eyebrow(ui: &mut Ui, text: &str, color: Color32) {
@@ -195,13 +201,7 @@ pub fn apply_visuals(ctx: &egui::Context, p: Pal) {
     v.window_stroke = Stroke::new(1.5, p.on_surface);
     v.selection.bg_fill = CYAN.linear_multiply(0.35);
     v.selection.stroke = Stroke::new(2.5, CYAN);
-    for w in [
-        &mut v.widgets.noninteractive,
-        &mut v.widgets.inactive,
-        &mut v.widgets.hovered,
-        &mut v.widgets.active,
-        &mut v.widgets.open,
-    ] {
+    for w in [&mut v.widgets.noninteractive, &mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active, &mut v.widgets.open] {
         w.corner_radius = CornerRadius::ZERO;
         w.expansion = 0.0;
     }
@@ -249,19 +249,14 @@ pub fn dark_scope(ui: &mut Ui) {
 /// Cyanotype 2.5 px focus ring, offset 2 px.
 pub fn focus_ring(ui: &Ui, resp: &Response) {
     if resp.has_focus() {
-        ui.painter()
-            .rect_stroke(resp.rect.expand(2.0), 0.0, Stroke::new(2.5, CYAN), StrokeKind::Outside);
+        ui.painter().rect_stroke(resp.rect.expand(2.0), 0.0, Stroke::new(2.5, CYAN), StrokeKind::Outside);
     }
 }
 
 /// 6.2 Key cap. Draws "enter" as a vector arrow, since neither font has U+21B5.
 pub fn keycap(ui: &Ui, right_center: Pos2, key: &str, color: Color32) -> Rect {
     let enter = key == "enter";
-    let text_w = if enter {
-        12.0
-    } else {
-        galley(ui, key, f_mono_semi(11.0), color, 0.0).size().x
-    };
+    let text_w = if enter { 12.0 } else { galley(ui, key, f_mono_semi(11.0), color, 0.0).size().x };
     let w = (text_w + 12.0).max(26.0);
     let rect = Rect::from_min_size(pos2(right_center.x - w, right_center.y - 13.0), vec2(w, 26.0));
     let p = ui.painter();
@@ -317,16 +312,28 @@ pub fn button(ui: &mut Ui, label: &str, key: Option<&str>, kind: Btn, height: f3
     let (fill, stroke, fg) = match kind {
         Btn::Primary => (if hovered { RED_HOVER } else { RED }, None, PAPER_WHITE),
         Btn::OnDark => {
-            if hovered { (TABLE, None, INK) } else { (Color32::TRANSPARENT, Some(Stroke::new(2.0, TABLE)), TABLE) }
+            if hovered {
+                (TABLE, None, INK)
+            } else {
+                (Color32::TRANSPARENT, Some(Stroke::new(2.0, TABLE)), TABLE)
+            }
         }
         Btn::OnDay => (if hovered { INK_2 } else { INK }, None, TABLE),
         Btn::Inverse => (if hovered { PAPER_DAY } else { TABLE }, None, INK),
         Btn::Alert => {
-            if hovered { (SAFELIGHT, None, INK) } else { (Color32::TRANSPARENT, Some(Stroke::new(2.0, SAFELIGHT)), SAFELIGHT_SOFT) }
+            if hovered {
+                (SAFELIGHT, None, INK)
+            } else {
+                (Color32::TRANSPARENT, Some(Stroke::new(2.0, SAFELIGHT)), SAFELIGHT_SOFT)
+            }
         }
         Btn::MonoSmall => {
             let c = ui.visuals().override_text_color.unwrap_or(TABLE);
-            if hovered { (c, None, invert_of(c)) } else { (Color32::TRANSPARENT, Some(Stroke::new(1.5, c)), c) }
+            if hovered {
+                (c, None, invert_of(c))
+            } else {
+                (Color32::TRANSPARENT, Some(Stroke::new(1.5, c)), c)
+            }
         }
     };
     let alpha = if enabled { 1.0 } else { 0.4 };
@@ -347,7 +354,11 @@ pub fn button(ui: &mut Ui, label: &str, key: Option<&str>, kind: Btn, height: f3
 }
 
 fn invert_of(c: Color32) -> Color32 {
-    if c.r() as u32 + c.g() as u32 + c.b() as u32 > 380 { INK } else { TABLE }
+    if c.r() as u32 + c.g() as u32 + c.b() as u32 > 380 {
+        INK
+    } else {
+        TABLE
+    }
 }
 
 /// 6.3 Segmented choice: square cells separated by 1 px rules; selected cell is inverted.
@@ -357,11 +368,8 @@ pub fn segmented(ui: &mut Ui, options: &[(&str, &str)], selected: &mut usize, co
     let w = ui.available_width();
     let cell = vec2(w / cols as f32, 62.0);
     let (area, _) = ui.allocate_exact_size(vec2(w, cell.y * rows as f32), Sense::hover());
-    let (rule_c, sel_bg, sel_fg, fg, sub) = if dark {
-        (RULE_STRONG, TABLE, INK, TABLE, ASH)
-    } else {
-        (RULE_DAY, INK, TABLE, INK, GRAPHITE)
-    };
+    let (rule_c, sel_bg, sel_fg, fg, sub) =
+        if dark { (RULE_STRONG, TABLE, INK, TABLE, ASH) } else { (RULE_DAY, INK, TABLE, INK, GRAPHITE) };
     let mut changed = false;
     for (i, (title, desc)) in options.iter().enumerate() {
         let r = Rect::from_min_size(area.min + vec2((i % cols) as f32 * cell.x, (i / cols) as f32 * cell.y), cell);
@@ -476,11 +484,7 @@ pub fn safelight_banner(ui: &mut Ui, minutes: u64) -> BannerAction {
         ui.horizontal(|ui| {
             ui.label(mono("Safelight break", 11.0, SAFELIGHT_SOFT));
             ui.add_space(10.0);
-            ui.label(body(
-                format!("{minutes} min in. Look at something far away for 20 seconds."),
-                14.0,
-                TABLE,
-            ));
+            ui.label(body(format!("{minutes} min in. Look at something far away for 20 seconds."), 14.0, TABLE));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.visuals_mut().override_text_color = Some(SAFELIGHT_SOFT);
                 if button(ui, "Done", None, Btn::MonoSmall, 40.0, None, true).clicked() {
@@ -539,14 +543,9 @@ pub fn ending_field(ui: &mut Ui, text: &mut String) {
     ui.horizontal(|ui| {
         ui.add_space(26.0);
         let l = ui.label(mono("File ending in the list", 10.5, GRAPHITE));
-        ui.add(
-            egui::TextEdit::singleline(text)
-                .font(f_mono_semi(12.0))
-                .hint_text("same as photo")
-                .desired_width(110.0),
-        )
-        .labelled_by(l.id)
-        .on_hover_text("Leave empty to keep each photo's own ending. Type jpg, nef, cr3... to change it, or none to leave it off.");
+        ui.add(egui::TextEdit::singleline(text).font(f_mono_semi(12.0)).hint_text("same as photo").desired_width(110.0))
+            .labelled_by(l.id)
+            .on_hover_text("Leave empty to keep each photo's own ending. Type jpg, nef, cr3... to change it, or none to leave it off.");
     });
     ui.add_space(8.0);
 }
@@ -614,7 +613,11 @@ pub fn fit(size: egui::Vec2, rect: Rect) -> Rect {
 
 /// On-screen size of `size` after `turns` quarter turns.
 pub fn turned(size: egui::Vec2, turns: u8) -> egui::Vec2 {
-    if turns % 2 == 1 { vec2(size.y, size.x) } else { size }
+    if turns % 2 == 1 {
+        vec2(size.y, size.x)
+    } else {
+        size
+    }
 }
 
 /// Paint the `uv` window of a texture turned `turns` quarter turns clockwise, filling `target`

@@ -152,9 +152,7 @@ pub fn frame_no(path: &str, idx: usize) -> String {
 }
 
 pub fn hhmmss(ms: i64) -> String {
-    chrono::DateTime::from_timestamp_millis(ms)
-        .map(|t| t.naive_utc().format("%H:%M:%S").to_string())
-        .unwrap_or_default()
+    chrono::DateTime::from_timestamp_millis(ms).map(|t| t.naive_utc().format("%H:%M:%S").to_string()).unwrap_or_default()
 }
 
 /// A set-aside reason in words a photographer uses.
@@ -455,12 +453,8 @@ impl Review {
     /// Close-call groups, best first.
     pub fn close_call_groups(&self) -> Vec<u64> {
         let e = self.entries();
-        let mut groups: Vec<(u64, usize)> = self
-            .groups
-            .iter()
-            .filter(|(_, m)| m.len() >= 2 && e[m[0]].close_call)
-            .map(|(g, m)| (*g, m[0]))
-            .collect();
+        let mut groups: Vec<(u64, usize)> =
+            self.groups.iter().filter(|(_, m)| m.len() >= 2 && e[m[0]].close_call).map(|(g, m)| (*g, m[0])).collect();
         groups.sort_by(|a, b| better(&e[a.1], &e[b.1]));
         groups.into_iter().map(|(g, _)| g).collect()
     }
@@ -750,7 +744,10 @@ pub fn frame_card(ui: &mut Ui, rv: &Review, app: &mut BestOfBurstApp, idx: usize
     match status {
         Status::Pick => marks::keeper(ui, img_rect.expand2(vec2(8.0, 6.0)), theme::SAFELIGHT, if big { 3.5 } else { 2.4 }, t),
         Status::Maybe => {
-            let w = Rect::from_min_max(pos2(img_rect.min.x + img_rect.width() * 0.1, img_rect.max.y - 3.0), pos2(img_rect.max.x - img_rect.width() * 0.1, img_rect.max.y + 9.0));
+            let w = Rect::from_min_max(
+                pos2(img_rect.min.x + img_rect.width() * 0.1, img_rect.max.y - 3.0),
+                pos2(img_rect.max.x - img_rect.width() * 0.1, img_rect.max.y + 9.0),
+            );
             marks::wave(ui, w, theme::SAFELIGHT, if big { 3.0 } else { 2.2 }, t)
         }
         Status::Reject | Status::Failed => marks::cross(ui, img_rect.shrink(4.0), theme::TABLE, if big { 3.0 } else { 2.2 }, t),
@@ -761,7 +758,15 @@ pub fn frame_card(ui: &mut Ui, rv: &Review, app: &mut BestOfBurstApp, idx: usize
     }
     let ey = well.max.y - 8.0 - edge_h / 2.0 + 4.0;
     if o.count > 1 {
-        theme::text_at(ui, pos2(well.min.x + 8.0, ey), Align2::LEFT_CENTER, &format!("×{}", o.count), theme::f_mono_semi(10.0), theme::TABLE, 0.4);
+        theme::text_at(
+            ui,
+            pos2(well.min.x + 8.0, ey),
+            Align2::LEFT_CENTER,
+            &format!("×{}", o.count),
+            theme::f_mono_semi(10.0),
+            theme::TABLE,
+            0.4,
+        );
     }
     let mut edge = match o.letter {
         Some(c) => format!("{c} {}", frame_no(&e.path, idx)),
@@ -774,7 +779,15 @@ pub fn frame_card(ui: &mut Ui, rv: &Review, app: &mut BestOfBurstApp, idx: usize
     theme::edge_arrow(ui, pos2(er.min.x - 9.0, er.center().y), theme::EDGE);
     if aside && big {
         let reason = e.reasons.first().map(|r| reason_words(r).to_string()).unwrap_or_else(|| "Your choice".into());
-        theme::text_at(ui, pos2(well.min.x + 8.0, well.min.y + 12.0), Align2::LEFT_TOP, &reason.to_uppercase(), theme::f_mono_semi(10.0), theme::SAFELIGHT_SOFT, 0.6);
+        theme::text_at(
+            ui,
+            pos2(well.min.x + 8.0, well.min.y + 12.0),
+            Align2::LEFT_TOP,
+            &reason.to_uppercase(),
+            theme::f_mono_semi(10.0),
+            theme::SAFELIGHT_SOFT,
+            0.6,
+        );
     }
     if o.selected {
         ui.painter().rect_stroke(rect.shrink(1.0), 0.0, Stroke::new(2.5, theme::CYAN), StrokeKind::Inside);
@@ -948,7 +961,9 @@ fn filter_bar(rv: &mut Review, ui: &mut Ui, p: Pal) {
     let frame = egui::Frame::new().fill(p.surface).inner_margin(egui::Margin { left: 24, right: 20, top: 8, bottom: 0 });
     egui::Panel::top("filter_bar").frame(frame).show(ui, |ui| {
         ui.horizontal(|ui| {
-            for (t, name, key) in [(Tab::Picks, "Keepers", "1"), (Tab::Maybe, "Maybe", "2"), (Tab::Rejects, "Set aside", "3"), (Tab::All, "All", "4")] {
+            for (t, name, key) in
+                [(Tab::Picks, "Keepers", "1"), (Tab::Maybe, "Maybe", "2"), (Tab::Rejects, "Set aside", "3"), (Tab::All, "All", "4")]
+            {
                 let text = format!("{} {}", name.to_uppercase(), theme::thousands(rv.tab_count(t)));
                 if filter_cell(ui, &text, rv.tab == t, p, &format!("{name} (key {key})")) {
                     rv.set_tab(t);
@@ -968,7 +983,15 @@ fn filter_bar(rv: &mut Review, ui: &mut Ui, p: Pal) {
                 }
                 let before = rv.sort;
                 let sort_label = egui::ComboBox::from_id_salt("sort")
-                    .selected_text(theme::mono(match rv.sort { SortBy::Time => "Time taken", SortBy::Score => "Best first", SortBy::Name => "File name" }, 10.5, p.on_surface))
+                    .selected_text(theme::mono(
+                        match rv.sort {
+                            SortBy::Time => "Time taken",
+                            SortBy::Score => "Best first",
+                            SortBy::Name => "File name",
+                        },
+                        10.5,
+                        p.on_surface,
+                    ))
                     .width(104.0)
                     .show_ui(ui, |ui| {
                         ui.selectable_value(&mut rv.sort, SortBy::Time, "Time taken");
@@ -996,11 +1019,7 @@ fn filter_bar(rv: &mut Review, ui: &mut Ui, p: Pal) {
                     rv.rerank();
                 }
                 ui.add_space(10.0);
-                let resp = ui.add(
-                    egui::TextEdit::singleline(&mut rv.keep_text)
-                        .font(theme::f_mono_semi(12.0))
-                        .desired_width(56.0),
-                );
+                let resp = ui.add(egui::TextEdit::singleline(&mut rv.keep_text).font(theme::f_mono_semi(12.0)).desired_width(56.0));
                 let kl = ui.label(theme::mono("Photos to keep", 10.5, p.muted));
                 let resp = resp.labelled_by(kl.id);
                 if resp.changed() {
@@ -1025,7 +1044,11 @@ fn filter_cell(ui: &mut Ui, text: &str, active: bool, p: Pal, a11y: &str) -> boo
     let g = theme::galley(ui, text, theme::f_xp(12.0), c, 0.4);
     ui.painter().galley(pos2(rect.min.x + 12.0, rect.center().y - g.size().y / 2.0), g, c);
     if active {
-        ui.painter().rect_filled(Rect::from_min_max(pos2(rect.min.x + 12.0, rect.max.y - 2.0), pos2(rect.max.x - 12.0, rect.max.y)), 0.0, p.mark);
+        ui.painter().rect_filled(
+            Rect::from_min_max(pos2(rect.min.x + 12.0, rect.max.y - 2.0), pos2(rect.max.x - 12.0, rect.max.y)),
+            0.0,
+            p.mark,
+        );
     }
     theme::focus_ring(ui, &resp);
     resp.clicked()
@@ -1057,7 +1080,10 @@ fn timeline(rv: &mut Review, ui: &mut Ui, p: Pal) {
             continue;
         }
         let h = (counts[b] as f32 / max).sqrt() * rect.height();
-        let r = Rect::from_min_max(pos2(rect.min.x + b as f32 * bw + 1.0, rect.max.y - h), pos2(rect.min.x + (b + 1) as f32 * bw - 1.0, rect.max.y));
+        let r = Rect::from_min_max(
+            pos2(rect.min.x + b as f32 * bw + 1.0, rect.max.y - h),
+            pos2(rect.min.x + (b + 1) as f32 * bw - 1.0, rect.max.y),
+        );
         ui.painter().rect_filled(r, 0.0, if close[b] { p.mark } else { p.bar });
     }
     ui.painter().line_segment([rect.left_bottom(), rect.right_bottom()], Stroke::new(1.0, p.rule));
@@ -1122,7 +1148,14 @@ fn contact_rows(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) 
                 for c in 0..COLS {
                     let Some(item) = rv.items.get(r * COLS + c).copied() else { break };
                     let selected = rv.selected == Some(item.idx);
-                    let resp = frame_card(ui, rv, app, item.idx, cell, CardOpts { count: item.count, selected, letter: None, show_score: true, plain: false });
+                    let resp = frame_card(
+                        ui,
+                        rv,
+                        app,
+                        item.idx,
+                        cell,
+                        CardOpts { count: item.count, selected, letter: None, show_score: true, plain: false },
+                    );
                     if resp.clicked() {
                         rv.selected = Some(item.idx);
                     }
@@ -1149,7 +1182,12 @@ fn side_panel(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) ->
             ui.set_max_width(352.0);
             let open = rv.open_close_calls();
             let msg = if open > 0 {
-                format!("I circled {}. {} {} your eye.", theme::plural(rv.ranking.summary.picks, "keeper"), theme::plural(open, "close call"), if open == 1 { "needs" } else { "need" })
+                format!(
+                    "I circled {}. {} {} your eye.",
+                    theme::plural(rv.ranking.summary.picks, "keeper"),
+                    theme::plural(open, "close call"),
+                    if open == 1 { "needs" } else { "need" }
+                )
             } else {
                 format!("I circled {}. No close calls left. Nice work.", theme::plural(rv.ranking.summary.picks, "keeper"))
             };
@@ -1160,7 +1198,17 @@ fn side_panel(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) ->
             ui.label(theme::mono("Needs your eyes", 11.0, p.muted));
             ui.label(theme::xp(theme::thousands(open), 96.0, p.on_surface).line_height(Some(86.0)));
             ui.add_space(6.0);
-            if theme::button(ui, "Open the loupe", Some("N"), Btn::Primary, 56.0, Some(ui.available_width()), open > 0 || !rv.close_call_groups().is_empty()).clicked() {
+            if theme::button(
+                ui,
+                "Open the loupe",
+                Some("N"),
+                Btn::Primary,
+                56.0,
+                Some(ui.available_width()),
+                open > 0 || !rv.close_call_groups().is_empty(),
+            )
+            .clicked()
+            {
                 if let Some(g) = rv.next_close_call(None) {
                     rv.open_focus(g, None);
                     nav = Some(Nav::To(Screen::Focus));
@@ -1260,7 +1308,9 @@ fn detail(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) -> Opt
         if theme::button(ui, "Loupe", Some("Spc"), Btn::MonoSmall, 40.0, Some(tw), e.ok).clicked() && rv.open_focus(e.group, Some(idx)) {
             nav = Some(Nav::To(Screen::Focus));
         }
-        if theme::button(ui, "Compare", Some("C"), Btn::MonoSmall, 40.0, Some(tw), e.group_size > 1).clicked() && rv.open_compare(e.group, None) {
+        if theme::button(ui, "Compare", Some("C"), Btn::MonoSmall, 40.0, Some(tw), e.group_size > 1).clicked()
+            && rv.open_compare(e.group, None)
+        {
             nav = Some(Nav::To(Screen::Compare));
         }
     });
@@ -1292,7 +1342,11 @@ fn detail(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) -> Opt
     }
     if !e.reasons.is_empty() {
         ui.add_space(6.0);
-        ui.label(theme::body(format!("Set aside: {}", e.reasons.iter().map(|r| reason_words(r)).collect::<Vec<_>>().join(", ")), 13.0, p.mark));
+        ui.label(theme::body(
+            format!("Set aside: {}", e.reasons.iter().map(|r| reason_words(r)).collect::<Vec<_>>().join(", ")),
+            13.0,
+            p.mark,
+        ));
     }
     if let Some(line) = rv.eyes_line(idx) {
         ui.add_space(4.0);
@@ -1309,7 +1363,13 @@ fn detail(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) -> Opt
             .and_then(chrono::DateTime::from_timestamp_millis)
             .map(|t| t.naive_utc().format("%-d %b %Y, %H:%M:%S").to_string())
             .unwrap_or_default();
-        let brightness = if m.mean_luma < 0.3 { "dark" } else if m.mean_luma > 0.62 { "bright" } else { "well balanced" };
+        let brightness = if m.mean_luma < 0.3 {
+            "dark"
+        } else if m.mean_luma > 0.62 {
+            "bright"
+        } else {
+            "well balanced"
+        };
         ui.label(
             egui::RichText::new(format!(
                 "{} photo · taken {}\nBrightness {} · blown highlights {:.1}% · black areas {:.1}%",
@@ -1333,7 +1393,14 @@ fn detail(rv: &mut Review, app: &mut BestOfBurstApp, ui: &mut Ui, p: Pal) -> Opt
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
                 for &m in chunk {
-                    let resp = frame_card(ui, rv, app, m, vec2(cw, cw * 0.78), CardOpts { count: 1, selected: m == idx, letter: None, show_score: true, plain: false });
+                    let resp = frame_card(
+                        ui,
+                        rv,
+                        app,
+                        m,
+                        vec2(cw, cw * 0.78),
+                        CardOpts { count: 1, selected: m == idx, letter: None, show_score: true, plain: false },
+                    );
                     if resp.clicked() {
                         rv.selected = Some(m);
                     }

@@ -166,10 +166,10 @@ impl Pdh {
 
     /// (whole card %, this process %): the busiest engine type, summed over its instances.
     fn sample(&mut self) -> (Option<f32>, Option<f32>) {
+        use std::collections::HashMap;
         use windows::Win32::System::Performance::{
             PdhCollectQueryData, PdhGetFormattedCounterArrayW, PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT_DOUBLE,
         };
-        use std::collections::HashMap;
         // SAFETY: the buffer is sized by the first call and only read within its item count.
         unsafe {
             if PdhCollectQueryData(self.query) != 0 {

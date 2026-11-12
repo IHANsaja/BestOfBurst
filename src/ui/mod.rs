@@ -33,12 +33,8 @@ pub fn run(folder: Option<PathBuf>) -> anyhow::Result<()> {
             .with_icon(window_icon()),
         ..Default::default()
     };
-    eframe::run_native(
-        "BestOfBurst",
-        options,
-        Box::new(move |cc| Ok(Box::new(app::BestOfBurstApp::new(cc, folder)))),
-    )
-    .map_err(|e| anyhow::anyhow!("window: {e}"))
+    eframe::run_native("BestOfBurst", options, Box::new(move |cc| Ok(Box::new(app::BestOfBurstApp::new(cc, folder)))))
+        .map_err(|e| anyhow::anyhow!("window: {e}"))
 }
 
 /// The burst logo for the title bar and taskbar.

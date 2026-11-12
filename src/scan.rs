@@ -71,20 +71,18 @@ impl Format {
 }
 
 const RAW_EXTS: &[&str] = &[
-    "3fr", "ari", "arw", "cr2", "dcr", "dng", "erf", "fff", "iiq", "k25", "kdc", "mef", "mos", "mrw",
-    "nef", "nrw", "orf", "pef", "raw", "rw2", "rwl", "sr2", "srf", "srw", "cr3", "raf", "crw", "x3f",
+    "3fr", "ari", "arw", "cr2", "dcr", "dng", "erf", "fff", "iiq", "k25", "kdc", "mef", "mos", "mrw", "nef", "nrw", "orf", "pef", "raw",
+    "rw2", "rwl", "sr2", "srf", "srw", "cr3", "raf", "crw", "x3f",
 ];
 
 /// Extensions never worth opening (sidecars, video, documents).
 const SKIP_EXTS: &[&str] = &[
-    "xmp", "thm", "aae", "mov", "mp4", "m4v", "avi", "mts", "m2ts", "mkv", "wav", "mp3", "lrv",
-    "txt", "json", "csv", "xml", "pdf", "db", "ini", "lnk", "zip", "pp3", "dop", "cos", "on1",
+    "xmp", "thm", "aae", "mov", "mp4", "m4v", "avi", "mts", "m2ts", "mkv", "wav", "mp3", "lrv", "txt", "json", "csv", "xml", "pdf", "db",
+    "ini", "lnk", "zip", "pp3", "dop", "cos", "on1",
 ];
 
 fn ext_of(path: &Path) -> String {
-    path.extension()
-        .map(|e| e.to_string_lossy().to_ascii_lowercase())
-        .unwrap_or_default()
+    path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default()
 }
 
 pub fn is_raw_ext(ext: &str) -> bool {
@@ -207,18 +205,11 @@ fn is_hidden(entry: &walkdir::DirEntry) -> bool {
     if entry.file_name().to_string_lossy().starts_with('.') {
         return true;
     }
-    entry
-        .metadata()
-        .map(|m| m.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0)
-        .unwrap_or(false)
+    entry.metadata().map(|m| m.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0).unwrap_or(false)
 }
 
 pub fn mtime_ms(meta: &std::fs::Metadata) -> i64 {
-    meta.modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+    meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
 fn same_path(a: &Path, b: &Path) -> bool {
@@ -230,9 +221,7 @@ fn same_path(a: &Path, b: &Path) -> bool {
 
 /// Canonical path, compared case-insensitively on Windows.
 pub fn dunce_canonical(p: &Path) -> Option<String> {
-    std::fs::canonicalize(p)
-        .ok()
-        .map(|c| c.to_string_lossy().to_lowercase())
+    std::fs::canonicalize(p).ok().map(|c| c.to_string_lossy().to_lowercase())
 }
 
 /// Walk `input` recursively, skipping the output folder, hidden files, files under 10 KB and
@@ -274,18 +263,8 @@ pub fn scan(input: &Path, out: &Path, stop: Option<&std::sync::atomic::AtomicBoo
             continue;
         }
         let Ok(Some(format)) = detect_file(path) else { continue };
-        let rel = path
-            .strip_prefix(input)
-            .unwrap_or(path)
-            .to_string_lossy()
-            .replace('/', "\\");
-        items.push(ScanItem {
-            rel,
-            abs: path.to_path_buf(),
-            size: meta.len(),
-            mtime_ms: mtime_ms(&meta),
-            format,
-        });
+        let rel = path.strip_prefix(input).unwrap_or(path).to_string_lossy().replace('/', "\\");
+        items.push(ScanItem { rel, abs: path.to_path_buf(), size: meta.len(), mtime_ms: mtime_ms(&meta), format });
     }
     items.sort_by(|a, b| a.rel.cmp(&b.rel));
     items

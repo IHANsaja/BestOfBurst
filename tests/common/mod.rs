@@ -51,9 +51,8 @@ pub fn checkerboard(w: u32, h: u32, cell: u32) -> RgbImage {
 pub fn scene(w: u32, h: u32, seed: u64) -> RgbImage {
     let mut rng = Rng::new(seed);
     let (gw, gh) = (7usize, 6usize);
-    let grid: Vec<[f64; 3]> = (0..gw * gh)
-        .map(|_| [rng.uniform() * 200.0 + 20.0, rng.uniform() * 200.0 + 20.0, rng.uniform() * 200.0 + 20.0])
-        .collect();
+    let grid: Vec<[f64; 3]> =
+        (0..gw * gh).map(|_| [rng.uniform() * 200.0 + 20.0, rng.uniform() * 200.0 + 20.0, rng.uniform() * 200.0 + 20.0]).collect();
     let mut rgb = Vec::with_capacity((w * h * 3) as usize);
     for y in 0..h {
         for x in 0..w {

@@ -257,9 +257,8 @@ fn attempt(sent: &RgbImage, original: &RgbImage, turns: u8, crop: [f32; 4]) -> R
 }
 
 fn open(path: &Path) -> Result<RgbImage> {
-    let format = scan::detect_file(path)
-        .with_context(|| format!("cannot read {}", path.display()))?
-        .context("not a photo BestOfBurst can open")?;
+    let format =
+        scan::detect_file(path).with_context(|| format!("cannot read {}", path.display()))?.context("not a photo BestOfBurst can open")?;
     Ok(decode::decode_full(path, format)?.image)
 }
 
@@ -296,7 +295,13 @@ pub struct CleanSummary {
 /// Remove the watermark from every sent photo whose original is sure (`Found`), writing
 /// `<name>.jpg` into `dir`. Sent photos and originals are only read. `input` is the folder the
 /// originals' paths are relative to.
-pub fn clean_all(input: &Path, matches: &[Match], dir: &Path, stop: &AtomicBool, progress: impl Fn(usize, usize) + Sync) -> Result<CleanSummary> {
+pub fn clean_all(
+    input: &Path,
+    matches: &[Match],
+    dir: &Path,
+    stop: &AtomicBool,
+    progress: impl Fn(usize, usize) + Sync,
+) -> Result<CleanSummary> {
     std::fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
     let todo: Vec<&Match> = matches.iter().filter(|m| m.verdict == Verdict::Found && m.best.is_some()).collect();
     let done = AtomicUsize::new(0);
@@ -323,7 +328,12 @@ pub fn clean_all(input: &Path, matches: &[Match], dir: &Path, stop: &AtomicBool,
             })
             .collect()
     });
-    let mut s = CleanSummary { dir: dir.to_path_buf(), unmatched: matches.len() - todo.len(), stopped: stop.load(Ordering::Relaxed), ..Default::default() };
+    let mut s = CleanSummary {
+        dir: dir.to_path_buf(),
+        unmatched: matches.len() - todo.len(),
+        stopped: stop.load(Ordering::Relaxed),
+        ..Default::default()
+    };
     for (name, r) in results.into_iter().flatten() {
         match r {
             Ok(()) => s.written += 1,

@@ -369,7 +369,12 @@ pub struct Luma {
 impl Luma {
     fn of(img: &RgbImage) -> Luma {
         let (w, h) = (img.width as usize, img.height as usize);
-        let v = img.rgb.chunks_exact(3).take(w * h).map(|p| (LUMA[0] * p[0] as f32 + LUMA[1] * p[1] as f32 + LUMA[2] * p[2] as f32).round() as u8).collect();
+        let v = img
+            .rgb
+            .chunks_exact(3)
+            .take(w * h)
+            .map(|p| (LUMA[0] * p[0] as f32 + LUMA[1] * p[1] as f32 + LUMA[2] * p[2] as f32).round() as u8)
+            .collect();
         Luma { w, h, v }
     }
 
@@ -434,7 +439,8 @@ impl Table {
         let mut out = vec![0f32; n * n];
         for r in 0..n {
             for c in 0..n {
-                let s = corner[(r + 1) * (n + 1) + c + 1] - corner[r * (n + 1) + c + 1] - corner[(r + 1) * (n + 1) + c] + corner[r * (n + 1) + c];
+                let s = corner[(r + 1) * (n + 1) + c + 1] - corner[r * (n + 1) + c + 1] - corner[(r + 1) * (n + 1) + c]
+                    + corner[r * (n + 1) + c];
                 out[r * n + c] = (s / area) as f32;
             }
         }
@@ -548,10 +554,8 @@ impl Index {
             .filter(|(_, f)| f.is_done())
             .filter_map(|(p, f)| f.thumb.as_ref().map(|t| (p.clone(), out.join(t))))
             .collect();
-        let grids: Vec<Option<Vec<f32>>> = list
-            .par_iter()
-            .map(|(_, t)| read_thumb(t).map(|img| normalized(&luma_grid(&img, COARSE))))
-            .collect();
+        let grids: Vec<Option<Vec<f32>>> =
+            list.par_iter().map(|(_, t)| read_thumb(t).map(|img| normalized(&luma_grid(&img, COARSE)))).collect();
         let mut idx = Index { paths: Vec::new(), thumbs: Vec::new(), sigs: Vec::new(), fine: Mutex::new(HashMap::new()) };
         for ((path, thumb), grid) in list.into_iter().zip(grids) {
             if let Some(g) = grid {
@@ -574,7 +578,9 @@ impl Index {
                 if stop.load(Ordering::Relaxed) {
                     return None;
                 }
-                let r = std::panic::catch_unwind(|| decode::decode_full(&i.abs, i.format).ok().and_then(|d| decode::resize_long_edge(d.image, 320).ok()));
+                let r = std::panic::catch_unwind(|| {
+                    decode::decode_full(&i.abs, i.format).ok().and_then(|d| decode::resize_long_edge(d.image, 320).ok())
+                });
                 progress(done.fetch_add(1, Ordering::Relaxed) + 1, items.len());
                 r.ok().flatten()
             })
@@ -699,9 +705,8 @@ pub fn names_match(original: &str, sent: &str) -> bool {
         // The frame number must not run on into more digits on either side.
         let before = long[..at].chars().next_back();
         let after = long[at + short.len()..].chars().next();
-        let digit_edge = |edge: Option<char>, own: Option<char>| {
-            edge.is_some_and(|c| c.is_ascii_digit()) && own.is_some_and(|c| c.is_ascii_digit())
-        };
+        let digit_edge =
+            |edge: Option<char>, own: Option<char>| edge.is_some_and(|c| c.is_ascii_digit()) && own.is_some_and(|c| c.is_ascii_digit());
         !digit_edge(before, short.chars().next()) && !digit_edge(after, short.chars().next_back())
     })
 }
@@ -718,7 +723,13 @@ struct Probe {
 /// not search again.
 type Crops = HashMap<usize, [f32; 4]>;
 
-fn rate(index: &Index, query: &Path, p: &Probe, mask: Option<&[bool]>, known: Option<&Crops>) -> (Vec<(Candidate, Vec<f32>)>, Verdict, Crops) {
+fn rate(
+    index: &Index,
+    query: &Path,
+    p: &Probe,
+    mask: Option<&[bool]>,
+    known: Option<&Crops>,
+) -> (Vec<(Candidate, Vec<f32>)>, Verdict, Crops) {
     let name = query.to_string_lossy();
     // Full frame first, for every look-alike.
     let mut first: Vec<(usize, u8, Table, Fit, bool)> = p
@@ -788,11 +799,7 @@ fn rate(index: &Index, query: &Path, p: &Probe, mask: Option<&[bool]>, known: Op
             let rival = scored.get(1).map(|x| &x.0).filter(|r| r.similarity >= CHECK_MIN);
             let clear = match rival {
                 None => true,
-                Some(r) => {
-                    best.diff <= CLEAR_RATIO * r.diff
-                        || r.diff - best.diff >= CLEAR_LEVELS
-                        || (best.name_match && !r.name_match)
-                }
+                Some(r) => best.diff <= CLEAR_RATIO * r.diff || r.diff - best.diff >= CLEAR_LEVELS || (best.name_match && !r.name_match),
             };
             // A crop lined up by pixels alone can be the next frame of the burst: unless the
             // file name agrees, it is shown for a look rather than trusted.
@@ -814,9 +821,10 @@ fn prefer_named(scored: &mut [(Candidate, Vec<f32>)]) {
         return;
     }
     let lead = scored[0].0.diff;
-    if let Some(k) = scored.iter().position(|(c, _)| {
-        c.name_match && c.similarity >= CHECK_MIN && c.diff <= lead / CLEAR_RATIO && c.diff - lead < CLEAR_LEVELS
-    }) {
+    if let Some(k) = scored
+        .iter()
+        .position(|(c, _)| c.name_match && c.similarity >= CHECK_MIN && c.diff <= lead / CLEAR_RATIO && c.diff - lead < CLEAR_LEVELS)
+    {
         scored[..=k].rotate_right(1);
     }
 }

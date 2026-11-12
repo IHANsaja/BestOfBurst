@@ -222,7 +222,11 @@ pub fn thousands(n: usize) -> String {
 
 fn clock(secs: u32) -> String {
     let (h, m, s) = (secs / 3600, (secs / 60) % 60, secs % 60);
-    if h > 0 { format!("{h}:{m:02}:{s:02}") } else { format!("{m}:{s:02}") }
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m}:{s:02}")
+    }
 }
 
 fn elapsed(secs: u64) -> String {
@@ -255,21 +259,14 @@ fn cmd_run(a: RunArgs) -> Result<()> {
     println!("Scanning...");
     let bar = ProgressBar::hidden();
     bar.set_style(
-        ProgressStyle::with_template("[{bar:30}] {pos}/{len}  {msg}")
-            .unwrap_or_else(|_| ProgressStyle::default_bar())
-            .progress_chars("#-"),
+        ProgressStyle::with_template("[{bar:30}] {pos}/{len}  {msg}").unwrap_or_else(|_| ProgressStyle::default_bar()).progress_chars("#-"),
     );
     let mut codec_missing = false;
     let outcome = engine::analyze_folder(&cfg, &stop, |ev| match ev {
         Event::Warning(w) => eprintln!("{w}"),
         Event::Engine(e) => println!("Engine: {e}"),
         Event::Scanned { total, new, already } => {
-            println!(
-                "Scanning... {} images ({} new, {} already analyzed)",
-                thousands(total),
-                thousands(new),
-                thousands(already)
-            );
+            println!("Scanning... {} images ({} new, {} already analyzed)", thousands(total), thousands(new), thousands(already));
             if new > 0 {
                 bar.set_length(new as u64);
                 bar.set_draw_target(indicatif::ProgressDrawTarget::stderr());
@@ -277,11 +274,7 @@ fn cmd_run(a: RunArgs) -> Result<()> {
         }
         Event::Progress { done, per_sec, eta_s, .. } => {
             bar.set_position(done as u64);
-            bar.set_message(format!(
-                "{:.0} img/s  ETA {}",
-                per_sec,
-                eta_s.map(clock).unwrap_or_else(|| "-".into())
-            ));
+            bar.set_message(format!("{:.0} img/s  ETA {}", per_sec, eta_s.map(clock).unwrap_or_else(|| "-".into())));
         }
         Event::Failed { error, .. } => {
             if !codec_missing && bestofburst::decode::wic::is_missing_codec(&error) {
@@ -299,11 +292,7 @@ fn cmd_run(a: RunArgs) -> Result<()> {
 
     let mut state = outcome.state;
     let (ranking, out_sum) = engine::rank_and_output(&mut state, &cfg)?;
-    println!(
-        "Ranking... {} burst groups, {} rejected",
-        thousands(ranking.summary.groups),
-        thousands(ranking.summary.rejects)
-    );
+    println!("Ranking... {} burst groups, {} rejected", thousands(ranking.summary.groups), thousands(ranking.summary.rejects));
     if out_sum.copied_fallback {
         println!("Hard links not supported here; copying files.");
     }
@@ -339,11 +328,7 @@ fn print_summary(s: &RankSummary, picks_dir: &Path, cfg: &RunConfig) {
     println!("  Maybe:   {}", thousands(s.maybe));
     let mut reasons: Vec<(&String, &usize)> = s.reject_reasons.iter().collect();
     reasons.sort_by(|a, b| b.1.cmp(a.1).then_with(|| a.0.cmp(b.0)));
-    let mut parts: Vec<String> = reasons
-        .iter()
-        .take(3)
-        .map(|(r, n)| format!("{} {}", r.replace('_', " "), thousands(**n)))
-        .collect();
+    let mut parts: Vec<String> = reasons.iter().take(3).map(|(r, n)| format!("{} {}", r.replace('_', " "), thousands(**n))).collect();
     let other: usize = reasons.iter().skip(3).map(|(_, n)| **n).sum();
     if other > 0 {
         parts.push(format!("other {}", thousands(other)));
@@ -368,11 +353,7 @@ fn cmd_rank(a: RankArgs) -> Result<()> {
         eprintln!("{w}");
     }
     let (ranking, out_sum) = engine::rank_and_output(&mut state, &cfg)?;
-    println!(
-        "Ranking... {} burst groups, {} rejected",
-        thousands(ranking.summary.groups),
-        thousands(ranking.summary.rejects)
-    );
+    println!("Ranking... {} burst groups, {} rejected", thousands(ranking.summary.groups), thousands(ranking.summary.rejects));
     if out_sum.copied_fallback {
         println!("Hard links not supported here; copying files.");
     }
@@ -491,7 +472,13 @@ fn cmd_clean(originals: &Path, sent: &[PathBuf], out: Option<PathBuf>) -> Result
     let dir = out.unwrap_or_else(|| bestofburst::ui::remover::default_dir(&queries));
     println!("Removing watermarks...");
     let s = bestofburst::clean::clean_all(&input, &report.matches, &dir, &stop, |_, _| {})?;
-    println!("Cleaned {} of {}  -> {}  ({})", thousands(s.written), thousands(queries.len()), s.dir.display(), elapsed(started.elapsed().as_secs()));
+    println!(
+        "Cleaned {} of {}  -> {}  ({})",
+        thousands(s.written),
+        thousands(queries.len()),
+        s.dir.display(),
+        elapsed(started.elapsed().as_secs())
+    );
     if s.unmatched > 0 {
         println!("  {} had no sure original in that folder and were left alone.", thousands(s.unmatched));
     }
@@ -531,7 +518,11 @@ fn cmd_unmark(sent: &[PathBuf], out: Option<PathBuf>, no_ai: bool) -> Result<()>
             }
         }
     };
-    println!("Learning the watermark from {} photos, then removing it{}...", thousands(queries.len()), if ai.is_some() { " (edges cleaned with AI)" } else { "" });
+    println!(
+        "Learning the watermark from {} photos, then removing it{}...",
+        thousands(queries.len()),
+        if ai.is_some() { " (edges cleaned with AI)" } else { "" }
+    );
     let (mark, s) = bestofburst::unmark::unmark_all(&queries, &dir, ai, &stop, &stage, |_, _| {})?;
     println!(
         "  Mark: covers {:.1}% of the frame, {:.0}% opaque, colour {:.0} {:.0} {:.0} (learned from {} photos)",
@@ -542,7 +533,13 @@ fn cmd_unmark(sent: &[PathBuf], out: Option<PathBuf>, no_ai: bool) -> Result<()>
         mark.colour[2],
         mark.learned_from
     );
-    println!("Cleaned {} of {}  -> {}  ({})", thousands(s.written), thousands(queries.len()), s.dir.display(), elapsed(started.elapsed().as_secs()));
+    println!(
+        "Cleaned {} of {}  -> {}  ({})",
+        thousands(s.written),
+        thousands(queries.len()),
+        s.dir.display(),
+        elapsed(started.elapsed().as_secs())
+    );
     if s.unmatched > 0 {
         println!("  {} did not carry the mark where the others do and were left alone.", thousands(s.unmatched));
     }
@@ -584,8 +581,7 @@ fn cmd_status(folder: &Path, out: Option<PathBuf>) -> Result<()> {
         println!("  Maybe:    {}", thousands(count("maybe")));
         println!("  Rejects:  {}", thousands(count("reject")));
         println!("  Groups:   {}", thousands(lr.groups.len()));
-        let close: std::collections::BTreeSet<u64> =
-            lr.results.values().filter(|r| r.close_call).map(|r| r.group).collect();
+        let close: std::collections::BTreeSet<u64> = lr.results.values().filter(|r| r.close_call).map(|r| r.group).collect();
         println!("  Close calls: {}", thousands(close.len()));
     } else {
         println!("Last rank:  none");

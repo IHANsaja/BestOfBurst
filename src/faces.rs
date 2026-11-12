@@ -61,9 +61,7 @@ fn load(bytes: &[u8]) -> Result<Plan> {
 fn models() -> Result<&'static Models, String> {
     static M: OnceLock<Result<Models, String>> = OnceLock::new();
     M.get_or_init(|| {
-        let build = || -> Result<Models> {
-            Ok(Models { detector: load(DETECTOR)?, mesh: load(LANDMARKS)?, anchors: anchors() })
-        };
+        let build = || -> Result<Models> { Ok(Models { detector: load(DETECTOR)?, mesh: load(LANDMARKS)?, anchors: anchors() }) };
         std::panic::catch_unwind(build)
             .unwrap_or_else(|_| Err(anyhow!("the face model crashed while loading")))
             .map_err(|e| format!("{e:#}"))
@@ -111,7 +109,11 @@ struct Level<'a> {
 impl Level<'_> {
     /// Upright width and height.
     fn up(&self) -> (usize, usize) {
-        if self.orientation >= 5 { (self.h, self.w) } else { (self.w, self.h) }
+        if self.orientation >= 5 {
+            (self.h, self.w)
+        } else {
+            (self.w, self.h)
+        }
     }
 
     /// Bilinear sample at (u, v) in this level's upright pixels; black outside.
@@ -141,7 +143,8 @@ impl Level<'_> {
             let i = (yi as usize * self.w + xi as usize) * 3;
             [self.rgb[i] as f32, self.rgb[i + 1] as f32, self.rgb[i + 2] as f32]
         };
-        let (a, b, c, d) = (px(x0 as i64, y0 as i64), px(x0 as i64 + 1, y0 as i64), px(x0 as i64, y0 as i64 + 1), px(x0 as i64 + 1, y0 as i64 + 1));
+        let (a, b, c, d) =
+            (px(x0 as i64, y0 as i64), px(x0 as i64 + 1, y0 as i64), px(x0 as i64, y0 as i64 + 1), px(x0 as i64 + 1, y0 as i64 + 1));
         let mut out = [0f32; 3];
         for k in 0..3 {
             out[k] = (a[k] * (1.0 - fx) + b[k] * fx) * (1.0 - fy) + (c[k] * (1.0 - fx) + d[k] * fx) * fy;
@@ -254,7 +257,9 @@ fn detect_window(m: &Models, level: &Level, x: f32, y: f32, side: f32, out: &mut
         let p1 = to_img(cx + w / 2.0, cy + h / 2.0);
         // A face cut by the window edge is found whole in a neighbouring window.
         let edge = 0.02;
-        if side < level.up().0.max(level.up().1) as f32 && (cx - w / 2.0 < -edge || cy - h / 2.0 < -edge || cx + w / 2.0 > 1.0 + edge || cy + h / 2.0 > 1.0 + edge) {
+        if side < level.up().0.max(level.up().1) as f32
+            && (cx - w / 2.0 < -edge || cy - h / 2.0 < -edge || cx + w / 2.0 > 1.0 + edge || cy + h / 2.0 > 1.0 + edge)
+        {
             continue;
         }
         out.push(Det {

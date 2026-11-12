@@ -430,7 +430,14 @@ pub fn paste(base: &RgbImage, mask: &[bool], tiles: &[Painted], tone: Option<(&[
 /// Paint `mask` on a photo: LaMa sees `unblended` (interleaved RGB 0..255, the mark already
 /// lifted) and the result is pasted over `base`, taking its smooth tone from `unblended` where
 /// `trust` says it is reliable. `None` when stopped.
-pub fn inpaint(lama: &Lama, unblended: &[f32], trust: &[bool], base: &RgbImage, mask: &[bool], stop: &AtomicBool) -> Result<Option<RgbImage>> {
+pub fn inpaint(
+    lama: &Lama,
+    unblended: &[f32],
+    trust: &[bool],
+    base: &RgbImage,
+    mask: &[bool],
+    stop: &AtomicBool,
+) -> Result<Option<RgbImage>> {
     let (w, h) = (base.width as usize, base.height as usize);
     let tiles = plan_tiles(mask, w, h);
     if tiles.is_empty() {

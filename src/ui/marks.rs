@@ -20,40 +20,25 @@ struct Path {
 const THUMB_CIRCLE: Path = Path {
     vb: [120.0, 100.0],
     start: [22.0, 60.0],
-    segs: &[
-        [10.0, 18.0, 90.0, 4.0, 100.0, 40.0],
-        [108.0, 74.0, 44.0, 98.0, 14.0, 74.0],
-        [2.0, 62.0, 12.0, 36.0, 36.0, 26.0],
-    ],
+    segs: &[[10.0, 18.0, 90.0, 4.0, 100.0, 40.0], [108.0, 74.0, 44.0, 98.0, 14.0, 74.0], [2.0, 62.0, 12.0, 36.0, 36.0, 26.0]],
 };
 
 // Keeper circle, hero size (viewBox 0 0 300 110).
 const HERO_CIRCLE: Path = Path {
     vb: [300.0, 110.0],
     start: [40.0, 70.0],
-    segs: &[
-        [20.0, 20.0, 250.0, 0.0, 285.0, 45.0],
-        [310.0, 85.0, 120.0, 112.0, 30.0, 88.0],
-        [0.0, 78.0, 18.0, 40.0, 70.0, 30.0],
-    ],
+    segs: &[[20.0, 20.0, 250.0, 0.0, 285.0, 45.0], [310.0, 85.0, 120.0, 112.0, 30.0, 88.0], [0.0, 78.0, 18.0, 40.0, 70.0, 30.0]],
 };
 
 // Logo circle (24 px): M5 9c-1-6 13-7 14-2s-11 7-13 3, made absolute.
-const LOGO_CIRCLE: Path = Path {
-    vb: [24.0, 24.0],
-    start: [5.0, 9.0],
-    segs: &[[4.0, 3.0, 18.0, 2.0, 19.0, 7.0], [20.0, 12.0, 8.0, 14.0, 6.0, 10.0]],
-};
+const LOGO_CIRCLE: Path =
+    Path { vb: [24.0, 24.0], start: [5.0, 9.0], segs: &[[4.0, 3.0, 18.0, 2.0, 19.0, 7.0], [20.0, 12.0, 8.0, 14.0, 6.0, 10.0]] };
 
 // Maybe wave (viewBox 0 0 120 20): one soft wave stroke.
 const WAVE: Path = Path {
     vb: [120.0, 20.0],
     start: [4.0, 12.0],
-    segs: &[
-        [20.0, 2.0, 34.0, 2.0, 46.0, 10.0],
-        [58.0, 18.0, 70.0, 20.0, 84.0, 10.0],
-        [98.0, 0.0, 106.0, 2.0, 116.0, 8.0],
-    ],
+    segs: &[[20.0, 2.0, 34.0, 2.0, 46.0, 10.0], [58.0, 18.0, 70.0, 20.0, 84.0, 10.0], [98.0, 0.0, 106.0, 2.0, 116.0, 8.0]],
 };
 
 // Set-aside cross: two slightly bowed diagonals (viewBox 0 0 120 100).
@@ -66,10 +51,7 @@ fn cubic(p0: Pos2, p1: Pos2, p2: Pos2, p3: Pos2, t: f32) -> Pos2 {
     let b = 3.0 * u * u * t;
     let c = 3.0 * u * t * t;
     let d = t * t * t;
-    pos2(
-        a * p0.x + b * p1.x + c * p2.x + d * p3.x,
-        a * p0.y + b * p1.y + c * p2.y + d * p3.y,
-    )
+    pos2(a * p0.x + b * p1.x + c * p2.x + d * p3.x, a * p0.y + b * p1.y + c * p2.y + d * p3.y)
 }
 
 fn points(path: &Path, rect: Rect) -> Vec<Pos2> {
@@ -187,10 +169,7 @@ pub fn burst(ui: &Ui, rect: Rect, dark: bool) {
     // The loop around the lit frame: the keeper path, scaled (0.36, 0.58) and turned 30 degrees.
     let raw = points(&THUMB_CIRCLE, Rect::from_min_size(Pos2::ZERO, vec2(120.0, 100.0)));
     let at = rect.min + vec2(87.5, 32.9) * k;
-    let pts: Vec<Pos2> = raw
-        .iter()
-        .map(|p| at + rot(vec2((p.x - 55.0) * 0.36, (p.y - 51.0) * 0.58), 30.0) * k)
-        .collect();
+    let pts: Vec<Pos2> = raw.iter().map(|p| at + rot(vec2((p.x - 55.0) * 0.36, (p.y - 51.0) * 0.58), 30.0) * k).collect();
     let w = (if small { 3.6 } else { 2.4 }) * k;
     ui.painter().add(Shape::line(pts, Stroke::new(w.max(1.2), lit)));
 }

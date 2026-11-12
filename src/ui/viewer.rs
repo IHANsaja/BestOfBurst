@@ -187,13 +187,29 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
                 let target = Rect::from_center_size(area.center() + v.pan, shown_size);
                 theme::paint_turned(ui.painter(), id, target, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), turns, Color32::WHITE);
                 if full.is_none() && error.is_none() {
-                    theme::text_at(ui, area.left_top() + vec2(16.0, 14.0), Align2::LEFT_TOP, "LOADING FULL SIZE...", theme::f_mono_semi(10.5), theme::EDGE, 0.6);
+                    theme::text_at(
+                        ui,
+                        area.left_top() + vec2(16.0, 14.0),
+                        Align2::LEFT_TOP,
+                        "LOADING FULL SIZE...",
+                        theme::f_mono_semi(10.5),
+                        theme::EDGE,
+                        0.6,
+                    );
                 }
             }
             None => app::center_text(ui, area, error.as_deref().unwrap_or("DEVELOPING..."), p),
         }
         if let Some(err) = &error {
-            theme::text_at(ui, area.left_top() + vec2(16.0, 14.0), Align2::LEFT_TOP, &format!("FULL SIZE FAILED: {err}").to_uppercase(), theme::f_mono_semi(10.5), theme::SAFELIGHT, 0.6);
+            theme::text_at(
+                ui,
+                area.left_top() + vec2(16.0, 14.0),
+                Align2::LEFT_TOP,
+                &format!("FULL SIZE FAILED: {err}").to_uppercase(),
+                theme::f_mono_semi(10.5),
+                theme::SAFELIGHT,
+                0.6,
+            );
         }
         let hint = "SCROLL OR + / - ZOOM · DRAG TO MOVE · DOUBLE-CLICK 100% · ARROWS NEXT · R / L TURN · P KEEP · ESC EXIT";
         theme::text_at(ui, area.left_bottom() + vec2(16.0, -12.0), Align2::LEFT_BOTTOM, hint, theme::f_mono(10.0), theme::ASH, 0.6);
@@ -203,7 +219,11 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
     let ppp = ctx.pixels_per_point();
     let actual = full.map(|(_, size)| {
         let texels = theme::turned(size, turns);
-        if fit_size.x > 0.0 { texels.x / (fit_size.x * ppp) } else { 1.0 }
+        if fit_size.x > 0.0 {
+            texels.x / (fit_size.x * ppp)
+        } else {
+            1.0
+        }
     });
     let zoom_now = rv.viewer.as_ref().map(|v| v.zoom).unwrap_or(1.0);
     let zoom_label = match actual {

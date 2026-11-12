@@ -57,12 +57,8 @@ pub fn tile_sums(img: &RgbImage) -> Option<TileSums> {
     if w < 3 || h < 3 {
         return None;
     }
-    let luma: Vec<f32> = img
-        .rgb
-        .chunks_exact(3)
-        .take(w * h)
-        .map(|p| LUMA[0] * p[0] as f32 + LUMA[1] * p[1] as f32 + LUMA[2] * p[2] as f32)
-        .collect();
+    let luma: Vec<f32> =
+        img.rgb.chunks_exact(3).take(w * h).map(|p| LUMA[0] * p[0] as f32 + LUMA[1] * p[1] as f32 + LUMA[2] * p[2] as f32).collect();
 
     // Clipping over all pixels
     let (mut lo, mut hi) = (0u64, 0u64);
@@ -93,19 +89,7 @@ pub fn tile_sums(img: &RgbImage) -> Option<TileSums> {
             let gy = (sw + 2.0 * s + se) - (nw + 2.0 * n + ne);
             let nz = 4.0 * c - 2.0 * (n + s + wv + e) + (nw + ne + sw + se);
             let (rg, yb, lc) = (r - g, 0.5 * (r + g) - b, c - 128.0);
-            let v = [
-                1.0,
-                lc,
-                lc * lc,
-                lap,
-                lap * lap,
-                gx * gx + gy * gy,
-                nz.abs(),
-                rg,
-                rg * rg,
-                yb,
-                yb * yb,
-            ];
+            let v = [1.0, lc, lc * lc, lap, lap * lap, gx * gx + gy * gy, nz.abs(), rg, rg * rg, yb, yb * yb];
             let t = &mut acc[tx];
             for k in 0..11 {
                 t[k] += v[k];
@@ -151,10 +135,8 @@ pub fn finish(s: &TileSums) -> (Metrics, [f32; 64]) {
     // Noise: flattest 25% of tiles by Sobel energy, median sigma
     let mut flat: Vec<&[f64; 11]> = tiles.iter().collect();
     flat.sort_by(|a, b| (a[5] / a[0]).total_cmp(&(b[5] / b[0])));
-    let mut sig: Vec<f64> = flat[..(tiles.len() / 4).max(1)]
-        .iter()
-        .map(|t| (std::f64::consts::PI / 2.0).sqrt() * t[6] / (6.0 * t[0]))
-        .collect();
+    let mut sig: Vec<f64> =
+        flat[..(tiles.len() / 4).max(1)].iter().map(|t| (std::f64::consts::PI / 2.0).sqrt() * t[6] / (6.0 * t[0])).collect();
     sig.sort_by(|a, b| a.total_cmp(b));
 
     let (mrg, myb) = (sum(7) / n, sum(9) / n);
@@ -184,9 +166,7 @@ pub fn dhash(img: &RgbImage) -> u64 {
         let r = y * 8 / h;
         for x in 0..w {
             let i = (y * w + x) * 3;
-            let v = LUMA[0] as f64 * img.rgb[i] as f64
-                + LUMA[1] as f64 * img.rgb[i + 1] as f64
-                + LUMA[2] as f64 * img.rgb[i + 2] as f64;
+            let v = LUMA[0] as f64 * img.rgb[i] as f64 + LUMA[1] as f64 * img.rgb[i + 1] as f64 + LUMA[2] as f64 * img.rgb[i + 2] as f64;
             let c = x * 9 / w;
             cells.sums[r][c] += v;
             cells.counts[r][c] += 1.0;
@@ -241,9 +221,7 @@ pub fn exif_capture_ms(ex: &exif::Exif) -> Option<i64> {
 pub fn mtime_as_naive_ms(mtime_ms: i64) -> i64 {
     use chrono::{Local, TimeZone};
     match Local.timestamp_millis_opt(mtime_ms) {
-        chrono::LocalResult::Single(t) | chrono::LocalResult::Ambiguous(t, _) => {
-            t.naive_local().and_utc().timestamp_millis()
-        }
+        chrono::LocalResult::Single(t) | chrono::LocalResult::Ambiguous(t, _) => t.naive_local().and_utc().timestamp_millis(),
         chrono::LocalResult::None => mtime_ms,
     }
 }
@@ -269,9 +247,7 @@ pub fn capture_ms(path: &Path, format: Format, mtime_ms: i64) -> i64 {
 
 /// ISO 8601 without a time zone, e.g. 2026-05-14T16:02:11.340.
 pub fn format_capture(ms: i64) -> String {
-    chrono::DateTime::from_timestamp_millis(ms)
-        .map(|t| t.naive_utc().format("%Y-%m-%dT%H:%M:%S%.3f").to_string())
-        .unwrap_or_default()
+    chrono::DateTime::from_timestamp_millis(ms).map(|t| t.naive_utc().format("%Y-%m-%dT%H:%M:%S%.3f").to_string()).unwrap_or_default()
 }
 
 /// 16-hex-digit FNV-1a hash of the relative path: the thumbnail id.

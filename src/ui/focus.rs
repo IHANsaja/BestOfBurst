@@ -69,7 +69,12 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
                 Key::ArrowLeft | Key::ArrowUp => view_idx = members[pos.saturating_sub(1)],
                 Key::ArrowRight | Key::ArrowDown => view_idx = members[(pos + 1).min(members.len() - 1)],
                 Key::Num1 | Key::Num2 | Key::Num3 | Key::Num4 => {
-                    let k = match key { Key::Num1 => 0, Key::Num2 => 1, Key::Num3 => 2, _ => 3 };
+                    let k = match key {
+                        Key::Num1 => 0,
+                        Key::Num2 => 1,
+                        Key::Num3 => 2,
+                        _ => 3,
+                    };
                     if let Some(&m) = members.get(k) {
                         view_idx = m;
                     }
@@ -201,7 +206,8 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         ui.label(theme::xp(file_name(&e.path), 18.0, p.on_surface));
         ui.label(theme::mono(format!("best in burst {:.0}  ·  quality {:.0}", e.group_score, e.score), 10.5, p.muted));
         ui.add_space(10.0);
-        let (base, cmp_to, name) = if view_idx == keeper { (keeper, other, other_letter.to_string()) } else { (keeper, Some(view_idx), view_letter.to_string()) };
+        let (base, cmp_to, name) =
+            if view_idx == keeper { (keeper, other, other_letter.to_string()) } else { (keeper, Some(view_idx), view_letter.to_string()) };
         ui.label(theme::mono(format!("Keeper {keeper_letter} vs {name}"), 10.5, p.muted));
         for (title, v, o, d) in rv.component_rows(base, cmp_to, &name) {
             theme::ruler(ui, p, title, v, o, &d);
@@ -250,7 +256,14 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
                 for (k, &m) in members.iter().enumerate() {
-                    let resp = frame_card(ui, rv, app, m, vec2(170.0, 128.0), CardOpts { count: 1, selected: m == view_idx, letter: Some(letter(k)), show_score: false, plain: false });
+                    let resp = frame_card(
+                        ui,
+                        rv,
+                        app,
+                        m,
+                        vec2(170.0, 128.0),
+                        CardOpts { count: 1, selected: m == view_idx, letter: Some(letter(k)), show_score: false, plain: false },
+                    );
                     if resp.clicked() {
                         if let Some(f) = &mut rv.focus {
                             f.view = m;
@@ -314,7 +327,15 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         ui.painter().rect_stroke(lens, 0.0, Stroke::new(2.0, theme::INK), egui::StrokeKind::Inside);
         let tag = Rect::from_min_size(lens.left_top() + vec2(2.0, 2.0), vec2(112.0, 20.0));
         ui.painter().rect_filled(tag, 0.0, theme::INK);
-        theme::text_at(ui, tag.left_center() + vec2(6.0, 0.0), Align2::LEFT_CENTER, "LOUPE · 100%", theme::f_mono_semi(10.0), theme::EDGE, 0.8);
+        theme::text_at(
+            ui,
+            tag.left_center() + vec2(6.0, 0.0),
+            Align2::LEFT_CENTER,
+            "LOUPE · 100%",
+            theme::f_mono_semi(10.0),
+            theme::EDGE,
+            0.8,
+        );
         let tag = Rect::from_min_size(lens.left_bottom() + vec2(2.0, -22.0), vec2(64.0, 20.0));
         ui.painter().rect_filled(tag, 0.0, theme::INK);
         theme::text_at(ui, tag.left_center() + vec2(6.0, 0.0), Align2::LEFT_CENTER, "Z BIGGER", theme::f_mono(10.0), theme::ASH, 0.8);

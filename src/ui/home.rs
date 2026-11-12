@@ -4,11 +4,11 @@
 use eframe::egui::{self, pos2, vec2, Align2, Key, Rect, Role, Sense, Stroke, StrokeKind, WidgetInfo};
 
 use super::app::{self, BestOfBurstApp};
-use super::help;
-use crate::engine::EngineChoice;
 use super::glim::{self, Mood};
-use super::theme::{self, Btn};
+use super::help;
 use super::marks;
+use super::theme::{self, Btn};
+use crate::engine::EngineChoice;
 use crate::rank::PRESETS;
 
 const ENGINES: [(&str, &str); 3] = [("Automatic", "Best for this PC"), ("Graphics", "Fastest"), ("Processor", "Any computer")];
@@ -17,7 +17,15 @@ const ENGINES: [(&str, &str); 3] = [("Automatic", "Best for this PC"), ("Graphic
 fn hw_row(ui: &mut egui::Ui, kind: &str, name: &str, detail: &str, used: bool) {
     ui.horizontal_top(|ui| {
         let (r, _) = ui.allocate_exact_size(vec2(48.0, 18.0), Sense::hover());
-        theme::text_at(ui, r.left_center(), Align2::LEFT_CENTER, kind, theme::f_mono_semi(10.5), if used { theme::SAFELIGHT } else { theme::ASH }, 0.8);
+        theme::text_at(
+            ui,
+            r.left_center(),
+            Align2::LEFT_CENTER,
+            kind,
+            theme::f_mono_semi(10.5),
+            if used { theme::SAFELIGHT } else { theme::ASH },
+            0.8,
+        );
         ui.vertical(|ui| {
             ui.label(theme::body(name, 14.0, theme::TABLE));
             if !detail.is_empty() {
@@ -53,7 +61,13 @@ fn keep_field(ui: &mut egui::Ui, text: &mut String) {
     let rect = row.response.rect.with_min_x(row.response.rect.min.x).expand2(vec2(0.0, 2.0));
     let focused = resp.has_focus();
     let hover = resp.hovered() || pen_hover;
-    let border = if focused { theme::CYAN } else if hover { theme::TABLE } else { theme::RULE_STRONG };
+    let border = if focused {
+        theme::CYAN
+    } else if hover {
+        theme::TABLE
+    } else {
+        theme::RULE_STRONG
+    };
     let width = if focused { 2.5 } else { 2.0 };
     ui.painter().rect_stroke(rect, 0.0, Stroke::new(width, border), StrokeKind::Inside);
     // Pencil: a grease pencil, drawn.
@@ -81,12 +95,8 @@ fn keep_field(ui: &mut egui::Ui, text: &mut String) {
     });
 }
 
-const SHOT_TYPES: [(&str, &str); 4] = [
-    ("General", "Everyday mix"),
-    ("Portrait", "Faces & skin"),
-    ("Sports", "Fast action"),
-    ("Landscape", "Scenery & colour"),
-];
+const SHOT_TYPES: [(&str, &str); 4] =
+    [("General", "Everyday mix"), ("Portrait", "Faces & skin"), ("Sports", "Fast action"), ("Landscape", "Scenery & colour")];
 
 pub fn fmt_n(n: usize) -> String {
     theme::thousands(n)
@@ -97,9 +107,8 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
     let p = app.pal();
 
     // Drop a folder (or a file inside it) on the window.
-    let dropped: Vec<std::path::PathBuf> = ctx.input(|i| {
-        i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect()
-    });
+    let dropped: Vec<std::path::PathBuf> =
+        ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
     if let Some(path) = dropped.into_iter().next() {
         let folder = if path.is_dir() { path } else { path.parent().map(|x| x.to_path_buf()).unwrap_or(path) };
         app.choose_folder(folder, &ctx);
@@ -345,7 +354,11 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
 
     let enter = !ctx.egui_wants_keyboard_input() && ctx.input(|i| i.key_pressed(Key::Enter));
     if (primary || enter) && can_start {
-        if open_results { app.open_results(&ctx) } else { app.start(&ctx) }
+        if open_results {
+            app.open_results(&ctx)
+        } else {
+            app.start(&ctx)
+        }
     } else if rerun {
         app.start(&ctx);
     }

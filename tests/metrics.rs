@@ -55,11 +55,7 @@ fn clipping_extremes() {
 fn dhash_behaviour() {
     let a = scene(640, 480, 1);
     assert_eq!(hamming(dhash(&a), dhash(&a)), 0);
-    let brighter = RgbImage {
-        width: a.width,
-        height: a.height,
-        rgb: a.rgb.iter().map(|&v| ((v as f32) * 1.1).min(255.0) as u8).collect(),
-    };
+    let brighter = RgbImage { width: a.width, height: a.height, rgb: a.rgb.iter().map(|&v| ((v as f32) * 1.1).min(255.0) as u8).collect() };
     let d = hamming(dhash(&a), dhash(&brighter));
     assert!(d <= 4, "brightness distance {d}");
     let other = scene(640, 480, 99);
@@ -114,9 +110,8 @@ fn every_pure_rust_format_decodes() {
     write_with_image(&img, &dir.join("a.qoi"), image::ImageFormat::Qoi);
     write_with_image(&img, &dir.join("a.ppm"), image::ImageFormat::Pnm);
     // 16-bit TIFF
-    let img16 = image::ImageBuffer::<image::Rgb<u16>, Vec<u16>>::from_fn(300, 200, |x, y| {
-        image::Rgb([(x * 200) as u16, (y * 300) as u16, 30000])
-    });
+    let img16 =
+        image::ImageBuffer::<image::Rgb<u16>, Vec<u16>>::from_fn(300, 200, |x, y| image::Rgb([(x * 200) as u16, (y * 300) as u16, 30000]));
     image::DynamicImage::ImageRgb16(img16).save_with_format(dir.join("b16.tiff"), image::ImageFormat::Tiff).unwrap();
     // A PNG renamed to .jpg decodes by signature.
     std::fs::copy(dir.join("a.png"), dir.join("renamed.jpg")).unwrap();

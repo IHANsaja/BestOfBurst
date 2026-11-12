@@ -76,9 +76,8 @@ struct Sample {
 }
 
 fn open(path: &Path) -> Result<RgbImage> {
-    let format = scan::detect_file(path)
-        .with_context(|| format!("cannot read {}", path.display()))?
-        .context("not a photo BestOfBurst can open")?;
+    let format =
+        scan::detect_file(path).with_context(|| format!("cannot read {}", path.display()))?.context("not a photo BestOfBurst can open")?;
     Ok(decode::decode_full(path, format)?.image)
 }
 
@@ -441,11 +440,17 @@ impl Mark {
                     }
                     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<Sample> {
                         let img = to_frame(open(p)?, fw)?;
-                        let grey = img
-                            .rgb
-                            .chunks_exact(3)
-                            .map(|c| if c[0].max(c[1]).max(c[2]) >= SATURATED { 255 } else { lum(c[0], c[1], c[2]).round().min(254.0) as u8 })
-                            .collect();
+                        let grey =
+                            img.rgb
+                                .chunks_exact(3)
+                                .map(|c| {
+                                    if c[0].max(c[1]).max(c[2]) >= SATURATED {
+                                        255
+                                    } else {
+                                        lum(c[0], c[1], c[2]).round().min(254.0) as u8
+                                    }
+                                })
+                                .collect();
                         Ok(Sample { h: img.height, grey })
                     }));
                     progress(done.fetch_add(1, Ordering::Relaxed) + 1, total);
@@ -496,7 +501,8 @@ impl Mark {
         });
         let mag: Vec<f32> = gx.iter().zip(&gy).map(|(a, b)| a.hypot(*b)).collect();
         // Only clear edges are added up; the rest is noise from the pictures.
-        let (kx, ky): (Vec<f32>, Vec<f32>) = gx.iter().zip(&gy).zip(&mag).map(|((&a, &b), &m)| if m > 0.03 { (a, b) } else { (0.0, 0.0) }).unzip();
+        let (kx, ky): (Vec<f32>, Vec<f32>) =
+            gx.iter().zip(&gy).zip(&mag).map(|((&a, &b), &m)| if m > 0.03 { (a, b) } else { (0.0, 0.0) }).unzip();
         let mut u = integrate(&kx, &ky, w, h);
         let base = median(&mut u.iter().step_by(7).copied().collect::<Vec<_>>());
         for v in u.iter_mut() {
@@ -532,13 +538,16 @@ impl Mark {
         // shade (a sky in many photos) has none.
         let step = -(1.0 - a_est).max(0.05).ln();
         let (label, parts) = regions(&opened, w, h, &mag);
-        let keep: Vec<bool> = std::iter::once(false).chain(parts.iter().map(|r| r.area as f32 > 2e-4 * (w * h) as f32 && r.support > 0.12 * step)).collect();
+        let keep: Vec<bool> =
+            std::iter::once(false).chain(parts.iter().map(|r| r.area as f32 > 2e-4 * (w * h) as f32 && r.support > 0.12 * step)).collect();
         let mut mask: Vec<bool> = label.iter().map(|&l| keep[l as usize]).collect();
         // And fill gaps inside the mark that have no edge around them (where the photos say
         // too little); a letter's own hole (the inside of an O) has a clear edge.
         let gaps: Vec<bool> = mask.iter().map(|&m| !m).collect();
         let (glabel, gparts) = regions(&gaps, w, h, &mag);
-        let fill: Vec<bool> = std::iter::once(false).chain(gparts.iter().map(|r| !r.touches_frame && r.area as f32 <= 0.02 * (w * h) as f32 && r.support <= 0.12 * step)).collect();
+        let fill: Vec<bool> = std::iter::once(false)
+            .chain(gparts.iter().map(|r| !r.touches_frame && r.area as f32 <= 0.02 * (w * h) as f32 && r.support <= 0.12 * step))
+            .collect();
         for (m, &l) in mask.iter_mut().zip(&glabel) {
             if fill[l as usize] {
                 *m = true;
@@ -601,7 +610,9 @@ impl Mark {
             if stop.load(Ordering::Relaxed) {
                 bail!("stopped");
             }
-            let Ok(Ok(img)) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| open(p).and_then(|i| to_frame(i, fw)))) else { continue };
+            let Ok(Ok(img)) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| open(p).and_then(|i| to_frame(i, fw)))) else {
+                continue;
+            };
             let off = (fh as i64 - img.height as i64) / 2;
             for q in &pairs {
                 let (iy, oy) = (q[1].round() as i64 - off, q[3].round() as i64 - off);
@@ -641,7 +652,15 @@ impl Mark {
             (0..w * h).map(|i| out[i] && !inn[i]).collect::<Vec<bool>>()
         };
         let cover: Vec<f32> = (0..w * h)
-            .map(|i| if near[i] { (opacity[i] / a_mean).clamp(0.0, 1.0) } else if mask[i] { 1.0 } else { 0.0 })
+            .map(|i| {
+                if near[i] {
+                    (opacity[i] / a_mean).clamp(0.0, 1.0)
+                } else if mask[i] {
+                    1.0
+                } else {
+                    0.0
+                }
+            })
             .collect();
         if let Some(p) = std::env::var_os("BOB_UNMARK_DEBUG") {
             let px: Vec<u8> = cover.iter().map(|&c| (c * 255.0).round() as u8).collect();
@@ -672,17 +691,7 @@ impl Mark {
         }
         let thin = (edges.len() / 40_000).max(1);
         let edges: Vec<[f32; 5]> = edges.into_iter().step_by(thin).collect();
-        Ok(Mark {
-            fw,
-            fh,
-            cover,
-            alpha,
-            colour,
-            pairs,
-            edges,
-            coverage: covered as f32 / (w * h) as f32,
-            learned_from: samples.len(),
-        })
+        Ok(Mark { fw, fh, cover, alpha, colour, pairs, edges, coverage: covered as f32 / (w * h) as f32, learned_from: samples.len() })
     }
 
     fn base_placement(&self, iw: u32, ih: u32) -> Placement {
@@ -864,7 +873,8 @@ impl Mark {
                 }
             }
         }
-        let classical = RgbImage { width: img.width, height: img.height, rgb: out.iter().map(|&v| v.round().clamp(0.0, 255.0) as u8).collect() };
+        let classical =
+            RgbImage { width: img.width, height: img.height, rgb: out.iter().map(|&v| v.round().clamp(0.0, 255.0) as u8).collect() };
         Removal { classical, unblended, cover: s, reach }
     }
 }
@@ -947,7 +957,13 @@ impl LnMap {
 /// Take the mark off one photo placed at `pl`; with `ai`, the leftover outline is painted
 /// over (see `inpaint`) and checked, falling back to the classical result when it still shows.
 /// `None` when stopped.
-pub fn clean_photo(mark: &Mark, img: &RgbImage, pl: &Placement, ai: Option<&Lama>, stop: &AtomicBool) -> Result<Option<(RgbImage, Option<AiEdge>)>> {
+pub fn clean_photo(
+    mark: &Mark,
+    img: &RgbImage,
+    pl: &Placement,
+    ai: Option<&Lama>,
+    stop: &AtomicBool,
+) -> Result<Option<(RgbImage, Option<AiEdge>)>> {
     let parts = mark.remove_parts(img, pl);
     let Some(lama) = ai else { return Ok(Some((parts.classical, None))) };
     let (w, h) = (img.width as usize, img.height as usize);
@@ -989,7 +1005,8 @@ pub fn unmark_all(
     std::fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
     let done = AtomicUsize::new(0);
     // Two photos at a time; one when the AI runs, as its tiles already fill the processor.
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(if ai.is_some() { 1 } else { 2 }).build().context("cannot start worker threads")?;
+    let pool =
+        rayon::ThreadPoolBuilder::new().num_threads(if ai.is_some() { 1 } else { 2 }).build().context("cannot start worker threads")?;
     // Some(Ok(Some(..))) written (with how the AI went), Some(Ok(None)) no mark there.
     type Outcome = Result<Option<Option<AiEdge>>>;
     let results: Vec<Option<(String, Outcome)>> = pool.install(|| {

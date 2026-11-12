@@ -13,8 +13,8 @@ use super::app::{self, BestOfBurstApp, BgMsg, Screen};
 use super::glim::{self, Mood};
 use super::theme::{self, Btn};
 use crate::clean::{self, CleanSummary};
-use crate::inpaint;
 use crate::find;
+use crate::inpaint;
 
 #[derive(Default)]
 pub struct RemoverState {
@@ -36,11 +36,7 @@ pub struct RemoverState {
 /// Where cleaned photos go when nothing else is said: a `watermark removed` folder beside the
 /// first watermarked photo.
 pub fn default_dir(queries: &[PathBuf]) -> PathBuf {
-    queries
-        .first()
-        .and_then(|q| q.parent())
-        .map(|p| p.join("watermark removed"))
-        .unwrap_or_else(|| PathBuf::from("watermark removed"))
+    queries.first().and_then(|q| q.parent()).map(|p| p.join("watermark removed")).unwrap_or_else(|| PathBuf::from("watermark removed"))
 }
 
 pub fn start(app: &mut BestOfBurstApp, ctx: &egui::Context) {
@@ -117,8 +113,24 @@ fn step(ui: &mut Ui, no: &str, title: &str, value: &str, set: bool, hovering: bo
         }
     }
     theme::text_at(ui, pos2(rect.min.x + 22.0, rect.min.y + 24.0), Align2::LEFT_CENTER, no, theme::f_mono_semi(11.0), theme::GRAPHITE, 0.9);
-    theme::text_at(ui, pos2(rect.min.x + 22.0, rect.min.y + 48.0), Align2::LEFT_CENTER, &title.to_uppercase(), theme::f_xp(18.0), theme::INK, 0.4);
-    theme::text_at(ui, pos2(rect.min.x + 22.0, rect.min.y + 72.0), Align2::LEFT_CENTER, value, theme::f_mono(10.5), if set { theme::INK_2 } else { theme::GRAPHITE }, 0.3);
+    theme::text_at(
+        ui,
+        pos2(rect.min.x + 22.0, rect.min.y + 48.0),
+        Align2::LEFT_CENTER,
+        &title.to_uppercase(),
+        theme::f_xp(18.0),
+        theme::INK,
+        0.4,
+    );
+    theme::text_at(
+        ui,
+        pos2(rect.min.x + 22.0, rect.min.y + 72.0),
+        Align2::LEFT_CENTER,
+        value,
+        theme::f_mono(10.5),
+        if set { theme::INK_2 } else { theme::GRAPHITE },
+        0.3,
+    );
 }
 
 pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
@@ -149,7 +161,8 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
     }
 
     // Dropped watermarked photos (or, when those are set and a single folder comes, the originals).
-    let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
+    let dropped: Vec<PathBuf> =
+        ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
     let hovering = ctx.input(|i| !i.raw.hovered_files.is_empty());
     if !dropped.is_empty() && !app.remover.running {
         if !app.remover.sent.is_empty() && app.remover.originals.is_none() && dropped.len() == 1 && dropped[0].is_dir() {
