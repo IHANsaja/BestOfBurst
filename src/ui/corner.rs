@@ -99,7 +99,11 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
     let mood = match app.corner.mood {
         Some((m, at)) if at.elapsed() < Duration::from_secs(3) => m,
         _ => {
-            if app.settings.energy < 25.0 { Mood::Sleepy } else { Mood::Idle }
+            if app.settings.energy < 25.0 {
+                Mood::Sleepy
+            } else {
+                Mood::Idle
+            }
         }
     };
 
@@ -125,7 +129,14 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
                     for &f in chunk {
-                        let r = frame_card(ui, &rv, app, f, vec2(cw, cw * 0.75), CardOpts { count: 1, selected: picked == Some(f), letter: None, show_score: false, plain: true });
+                        let r = frame_card(
+                            ui,
+                            &rv,
+                            app,
+                            f,
+                            vec2(cw, cw * 0.75),
+                            CardOpts { count: 1, selected: picked == Some(f), letter: None, show_score: false, plain: true },
+                        );
                         if picked.is_some() && f == answer {
                             marks::keeper(ui, r.rect.shrink(10.0), theme::RED, 4.0, 1.0);
                         }
@@ -159,7 +170,11 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
             Some(_) => "Close! The circled one is sharper.".into(),
         };
         ui.label(theme::xp(verdict, 16.0, theme::INK));
-        ui.label(theme::mono(format!("Score {} / {} · best {}", app.corner.score, app.corner.rounds, app.settings.sharp_eye_best), 10.5, theme::GRAPHITE));
+        ui.label(theme::mono(
+            format!("Score {} / {} · best {}", app.corner.score, app.corner.rounds, app.settings.sharp_eye_best),
+            10.5,
+            theme::GRAPHITE,
+        ));
         ui.add_space(8.0);
         if theme::button(ui, "Next strip", Some("enter"), Btn::OnDay, 52.0, None, picked.is_some()).clicked()
             || (picked.is_some() && ctx.input(|i| i.key_pressed(Key::Enter)))
@@ -178,7 +193,15 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
         resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, "Glim"));
         let paper = Rect::from_min_size(pos2(rect.min.x, rect.min.y + 8.0), vec2(size + 40.0, size + 16.0));
         ui.painter().rect_filled(paper, 0.0, theme::PAPER_DAY);
-        glim::paint(ui, Rect::from_min_size(paper.min + vec2(20.0, 8.0), vec2(size, size)), mood, false, app.time(), app.reduced_motion, 1.0);
+        glim::paint(
+            ui,
+            Rect::from_min_size(paper.min + vec2(20.0, 8.0), vec2(size, size)),
+            mood,
+            false,
+            app.time(),
+            app.reduced_motion,
+            1.0,
+        );
         let say = match mood {
             Mood::Cheer => "Yes!",
             Mood::Happy => "That's nice.",
@@ -208,6 +231,10 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
             }
         });
         ui.add_space(10.0);
-        ui.label(theme::body(format!("{} settled so far. Each one earns a treat.", theme::plural(app.settings.settled as usize, "close call")), 14.0, theme::INK_2));
+        ui.label(theme::body(
+            format!("{} settled so far. Each one earns a treat.", theme::plural(app.settings.settled as usize, "close call")),
+            14.0,
+            theme::INK_2,
+        ));
     });
 }

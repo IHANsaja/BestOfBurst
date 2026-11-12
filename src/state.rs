@@ -143,10 +143,7 @@ impl State {
             Ok(mut s) => {
                 let mut warning = None;
                 if s.version != crate::ANALYSIS_VERSION {
-                    warning = Some(format!(
-                        "state.json is from analysis version {}; re-analyzing every file.",
-                        s.version
-                    ));
+                    warning = Some(format!("state.json is from analysis version {}; re-analyzing every file.", s.version));
                     s.files.clear();
                     s.last_rank = None;
                     s.version = crate::ANALYSIS_VERSION;
@@ -160,10 +157,7 @@ impl State {
                 std::fs::rename(&path, &bad).ok();
                 Ok((
                     State::new(input),
-                    Some(format!(
-                        "Warning: state.json could not be read ({e}); renamed to {} and starting fresh.",
-                        bad.display()
-                    )),
+                    Some(format!("Warning: state.json could not be read ({e}); renamed to {} and starting fresh.", bad.display())),
                 ))
             }
         }

@@ -123,13 +123,13 @@ fn tone_curves(original: &RgbImage, preview: &RgbImage) -> [[u8; 256]; 3] {
                 blocks.push((v, wsum, a.2 + b.2));
             }
         }
-        let flat: Vec<f64> = blocks.iter().flat_map(|b| std::iter::repeat(b.0).take(b.2)).collect();
+        let flat: Vec<f64> = blocks.iter().flat_map(|b| std::iter::repeat_n(b.0, b.2)).collect();
         // Values the photo never uses before its first known one start from that one.
         let first = (0..256).find(|&o| med[o].is_some()).unwrap_or(0);
-        for o in 0..256usize {
+        for (o, v) in curves[c].iter_mut().enumerate() {
             let (a, b) = (o.saturating_sub(3).max(first.min(o)), (o + 4).min(256));
             let mean = (a..b).map(|k| flat[k.max(first)]).sum::<f64>() / (b - a) as f64;
-            curves[c][o] = mean.round().clamp(0.0, 255.0) as u8;
+            *v = mean.round().clamp(0.0, 255.0) as u8;
         }
     }
     curves
@@ -257,9 +257,8 @@ fn attempt(sent: &RgbImage, original: &RgbImage, turns: u8, crop: [f32; 4]) -> R
 }
 
 fn open(path: &Path) -> Result<RgbImage> {
-    let format = scan::detect_file(path)
-        .with_context(|| format!("cannot read {}", path.display()))?
-        .context("not a photo BestOfBurst can open")?;
+    let format =
+        scan::detect_file(path).with_context(|| format!("cannot read {}", path.display()))?.context("not a photo BestOfBurst can open")?;
     Ok(decode::decode_full(path, format)?.image)
 }
 
@@ -288,12 +287,21 @@ pub struct CleanSummary {
     /// Sent file and why it could not be cleaned.
     pub errors: Vec<(String, String)>,
     pub stopped: bool,
+    /// Photo and how the AI edge clean-up went, when it was used (watermark remover without
+    /// originals only; empty otherwise).
+    pub ai: Vec<(String, crate::inpaint::AiEdge)>,
 }
 
 /// Remove the watermark from every sent photo whose original is sure (`Found`), writing
 /// `<name>.jpg` into `dir`. Sent photos and originals are only read. `input` is the folder the
 /// originals' paths are relative to.
-pub fn clean_all(input: &Path, matches: &[Match], dir: &Path, stop: &AtomicBool, progress: impl Fn(usize, usize) + Sync) -> Result<CleanSummary> {
+pub fn clean_all(
+    input: &Path,
+    matches: &[Match],
+    dir: &Path,
+    stop: &AtomicBool,
+    progress: impl Fn(usize, usize) + Sync,
+) -> Result<CleanSummary> {
     std::fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
     let todo: Vec<&Match> = matches.iter().filter(|m| m.verdict == Verdict::Found && m.best.is_some()).collect();
     let done = AtomicUsize::new(0);
@@ -320,7 +328,12 @@ pub fn clean_all(input: &Path, matches: &[Match], dir: &Path, stop: &AtomicBool,
             })
             .collect()
     });
-    let mut s = CleanSummary { dir: dir.to_path_buf(), unmatched: matches.len() - todo.len(), stopped: stop.load(Ordering::Relaxed), ..Default::default() };
+    let mut s = CleanSummary {
+        dir: dir.to_path_buf(),
+        unmatched: matches.len() - todo.len(),
+        stopped: stop.load(Ordering::Relaxed),
+        ..Default::default()
+    };
     for (name, r) in results.into_iter().flatten() {
         match r {
             Ok(()) => s.written += 1,

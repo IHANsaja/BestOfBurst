@@ -1,5 +1,5 @@
 //! 8. Glim: a small lens-hood body with a camera-aperture eye, drawn as ink on paper.
-//! Glim reacts and never blocks: no modals, no sound, no focus stealing.
+//!    Glim reacts and never blocks: no modals, no sound, no focus stealing.
 
 use std::f32::consts::TAU;
 
@@ -81,7 +81,10 @@ pub fn paint(ui: &Ui, rect: Rect, mood: Mood, night: bool, time: f64, reduced: b
     let r = 15.0 * s;
     let blink = !reduced && (time % 4.2) < 0.14;
     if blink || mood == Mood::Sleepy && !reduced && (time % 6.0) < 3.0 {
-        painter.add(Shape::line(cubic(eye - vec2(r, 0.0), eye + vec2(-r * 0.4, r * 0.35), eye + vec2(r * 0.4, r * 0.35), eye + vec2(r, 0.0), 12), line));
+        painter.add(Shape::line(
+            cubic(eye - vec2(r, 0.0), eye + vec2(-r * 0.4, r * 0.35), eye + vec2(r * 0.4, r * 0.35), eye + vec2(r, 0.0), 12),
+            line,
+        ));
     } else {
         let ring: Vec<Pos2> = (0..=40)
             .map(|k| {
@@ -102,16 +105,19 @@ pub fn paint(ui: &Ui, rect: Rect, mood: Mood, night: bool, time: f64, reduced: b
                 eye + vec2(a.cos(), a.sin()) * pupil
             })
             .collect();
-        for k in 0..6 {
+        for (k, &p) in hex.iter().enumerate() {
             let a = k as f32 / 6.0 * TAU + 0.3 + 0.75;
             let outer = eye + vec2(a.cos(), a.sin()) * r * 0.97;
-            painter.line_segment([hex[k], outer], Stroke::new(w * 0.55, c.ink));
+            painter.line_segment([p, outer], Stroke::new(w * 0.55, c.ink));
         }
         painter.add(Shape::closed_line(hex, Stroke::new(w * 0.8, c.ink)));
         painter.circle_filled(eye, (1.8 * s).max(1.5), c.red);
         if mood == Mood::Sleepy {
             // Heavy lid.
-            painter.add(Shape::line(cubic(eye + vec2(-r, -2.0 * s), eye + vec2(-r * 0.4, -r * 0.2), eye + vec2(r * 0.4, -r * 0.2), eye + vec2(r, -2.0 * s), 12), line));
+            painter.add(Shape::line(
+                cubic(eye + vec2(-r, -2.0 * s), eye + vec2(-r * 0.4, -r * 0.2), eye + vec2(r * 0.4, -r * 0.2), eye + vec2(r, -2.0 * s), 12),
+                line,
+            ));
         }
     }
 
@@ -133,7 +139,15 @@ pub fn paint(ui: &Ui, rect: Rect, mood: Mood, night: bool, time: f64, reduced: b
         for (k, (x, y)) in [(80.0, 26.0), (88.0, 14.0)].iter().enumerate() {
             let pos = p(*x, *y - drift * 4.0);
             let alpha = if reduced { 1.0 } else { 1.0 - (drift - k as f32 * 0.3).abs().min(1.0) * 0.6 };
-            theme::text_at(ui, pos, Align2::CENTER_CENTER, "z", theme::f_mono_semi((8.0 + 3.0 * k as f32) * s.max(0.5)), c.ink.gamma_multiply(alpha), 0.0);
+            theme::text_at(
+                ui,
+                pos,
+                Align2::CENTER_CENTER,
+                "z",
+                theme::f_mono_semi((8.0 + 3.0 * k as f32) * s.max(0.5)),
+                c.ink.gamma_multiply(alpha),
+                0.0,
+            );
         }
     }
     if mood == Mood::Cheer && cheer_t > 0.0 {
@@ -150,7 +164,12 @@ pub fn card(ui: &mut Ui, mood: Mood, night: bool, message: &str, size: f32, time
     resp.widget_info(|| WidgetInfo::labeled(Role::Link, true, "Glim: open Glim's corner"));
     let painter = ui.painter();
     painter.rect_filled(rect, 0.0, c.paper);
-    painter.rect_stroke(rect, 0.0, Stroke::new(1.5, if resp.hovered() { c.ink } else { c.ink.gamma_multiply(0.25) }), eframe::egui::StrokeKind::Inside);
+    painter.rect_stroke(
+        rect,
+        0.0,
+        Stroke::new(1.5, if resp.hovered() { c.ink } else { c.ink.gamma_multiply(0.25) }),
+        eframe::egui::StrokeKind::Inside,
+    );
     let glim_rect = Rect::from_min_size(rect.min + vec2(8.0, 8.0), vec2(size, size));
     let inner = if mood == Mood::Cheer { glim_rect.shrink(size * 0.12) } else { glim_rect };
     paint(ui, inner, mood, night, time, reduced, 1.0);

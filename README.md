@@ -178,6 +178,8 @@ The remover takes watermarked previews and the folder with their originals. Each
 
 **Without originals.** Leave the originals folder out and the mark is learned from the watermarked photos themselves. A see-through mark (a word or logo stamped on every preview, scaled with the photo's width and centred) is the only thing that stays put across many different pictures: the median of the photos' edges, read in a space where such a mark is a step of the same height whatever is behind it, is added up into the mark's opacity map, and its exact opacity and colour are measured just inside against just outside its edge. Each photo is then un-blended (`real = (seen - opacity x colour) / (1 - opacity)`), and the thin anti-aliased rim of the mark is filled smoothly from both sides. It needs at least 3 different photos with the same mark (10 or more is better); photos where the learned mark isn't found are left alone. A fully opaque mark hides what is under it, so that needs the originals.
 
+**AI edge clean-up (optional, offline).** JPEG previews smear the mark's edge over 8 x 8 blocks, keep colour at half resolution and leave a ringing halo just outside it, so the smooth fill can leave a faint pale outline, most visible on dark suits and on leaves or fabric. With the free **LaMa** inpainting model installed, that edge band (widened to at least one JPEG block) and any part of the mark so opaque that un-blending only boosts noise are painted over instead. LaMa works on 512 px tiles: they overlap by 64 px and are laid at the photo's own resolution over just the areas to paint, so the thin outline is never shrunk away; it sees the already un-blended photo, only the painted pixels are put back (faded in over 3 px), and each result is checked: if the outline still shows, the band is widened once more, and if it still shows, the smooth fill is kept and the photo is listed. Get the model (about 200 MB, Apache-2.0) with `scripts\fetch-lama.ps1`, or put `lama_fp32.onnx` in `%LOCALAPPDATA%\BestOfBurst\models\` or in a `models` folder beside `bestofburst.exe` (details and hash in `assets/models/README.md`). It runs on the processor with tract and nothing leaves the computer; it is much slower: about 9 minutes for one pass over a 14-megapixel photo on a 4-core laptop (35 tiles), and twice that when the second pass runs. Tiles run in parallel as far as free memory allows. When the model is there, the step is on (*Clean edges with AI* on the remover screen; `--no-ai` on the command line turns it off); without it, everything works as before.
+
 ---
 
 ## For developers
@@ -221,7 +223,7 @@ bestofburst ui [FOLDER]
 bestofburst probe <FILE>                                            # format, metrics, faces and eyes, timing
 bestofburst find <FOLDER> <SENT FILES OR FOLDERS>... [--copy] [--list] [--clean] [--names <ENDING>] [--out <DIR>]
 bestofburst clean <ORIGINALS FOLDER> <WATERMARKED FILES OR FOLDERS>... [--out <DIR>]   # watermark remover
-bestofburst unmark <WATERMARKED FILES OR FOLDERS>... [--out <DIR>]   # watermark remover, no originals
+bestofburst unmark <WATERMARKED FILES OR FOLDERS>... [--out <DIR>] [--no-ai]   # watermark remover, no originals
 ```
 
 </details>
@@ -239,6 +241,8 @@ bestofburst unmark <WATERMARKED FILES OR FOLDERS>... [--out <DIR>]   # watermark
 | `src/rank.rs` | Burst grouping with look-back, rejects, blink-or-pose, percentile scoring, subject sharpness, selection |
 | `src/clean.rs` | Watermark remover: frame the original like the preview, match tones, rebuild under the mark |
 | `src/unmark.rs` | Watermark remover without originals: learn the mark from the photos, un-blend it |
+| `src/inpaint.rs` | Optional AI edge clean-up for `unmark`: LaMa on full-resolution tiles, paste-back, outline check |
+| `scripts/fetch-lama.ps1` | Downloads the LaMa model and checks its SHA-256 |
 | `src/find.rs` | Preview-to-original matching: coarse shortlist, exact comparison, learned watermark mask |
 | `src/state.rs` | `state.json`: resumable progress, rankings and your choices (atomic saves) |
 | `src/output.rs` | Picks / maybe / rejects folders (hard links or copies), `report.csv` |
@@ -284,4 +288,4 @@ The logo is a burst of twelve frames around an aperture, with one frame lit and 
 
 Proprietary software. Copyright © 2026 Ihan Hansaja. All rights reserved. Use is governed by the [End User License Agreement](LICENSE); a license key is required beyond any trial period.
 
-Bundles **Archivo** and **Martian Mono** under the SIL Open Font License 1.1 (`assets/fonts/OFL-*.txt`), instanced from [google/fonts](https://github.com/google/fonts). Built with [egui](https://github.com/emilk/egui), [wgpu](https://github.com/gfx-rs/wgpu), [image](https://github.com/image-rs/image), [zune-jpeg](https://github.com/etemesi254/zune-image), [jxl-oxide](https://github.com/tirr-c/jxl-oxide) and [rayon](https://github.com/rayon-rs/rayon).
+Bundles **Archivo** and **Martian Mono** under the SIL Open Font License 1.1 (`assets/fonts/OFL-*.txt`), instanced from [google/fonts](https://github.com/google/fonts). Built with [egui](https://github.com/emilk/egui), [wgpu](https://github.com/gfx-rs/wgpu), [image](https://github.com/image-rs/image), [zune-jpeg](https://github.com/etemesi254/zune-image), [jxl-oxide](https://github.com/tirr-c/jxl-oxide), [rayon](https://github.com/rayon-rs/rayon) and [tract](https://github.com/sonos/tract) (MIT/Apache-2.0). The face models (MediaPipe, Apache-2.0) are built in; the optional inpainting model, [LaMa](https://github.com/advimman/lama) as exported by [Carve/LaMa-ONNX](https://huggingface.co/Carve/LaMa-ONNX) (Apache-2.0), is downloaded separately (see `assets/models/README.md`).

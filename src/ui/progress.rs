@@ -10,7 +10,11 @@ use super::theme::{self, Btn};
 
 fn clock(secs: u32) -> String {
     let (h, m, s) = (secs / 3600, (secs / 60) % 60, secs % 60);
-    if h > 0 { format!("{h}:{m:02}:{s:02}") } else { format!("{m}:{s:02}") }
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m}:{s:02}")
+    }
 }
 
 pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
@@ -29,7 +33,15 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
             app::text_cell(ui, &status, false);
             let (rect, resp) = ui.allocate_exact_size(vec2(64.0, app::HEADER_H), Sense::click());
             resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Link, true, "Glim: open Glim's corner"));
-            super::glim::paint(ui, Rect::from_center_size(rect.center(), vec2(42.0, 42.0)), Mood::Sleepy, true, app.time(), app.reduced_motion, 1.0);
+            super::glim::paint(
+                ui,
+                Rect::from_center_size(rect.center(), vec2(42.0, 42.0)),
+                Mood::Sleepy,
+                true,
+                app.time(),
+                app.reduced_motion,
+                1.0,
+            );
             glim_clicked = resp.clicked();
             app::cell_rule(ui);
         },
@@ -267,7 +279,14 @@ fn live_panel(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
                 stat(ui, "Cores", "not shown by this card");
             }
             if let (Some(u), Some(t)) = (snap.gpu_mem_used_mb, snap.gpu_mem_total_mb) {
-                theme::ruler(ui, p, "Graphics memory", u as f32 / t.max(1) as f32, None, &format!("{} / {} MB", theme::thousands(u as usize), theme::thousands(t as usize)));
+                theme::ruler(
+                    ui,
+                    p,
+                    "Graphics memory",
+                    u as f32 / t.max(1) as f32,
+                    None,
+                    &format!("{} / {} MB", theme::thousands(u as usize), theme::thousands(t as usize)),
+                );
             }
 
             ui.add_space(12.0);
@@ -281,7 +300,11 @@ fn live_panel(app: &mut BestOfBurstApp, ui: &mut egui::Ui) {
             if st.cpu_photos > 0 {
                 stat(ui, "Checking it (processor)", &format!("{:.2} s", st.cpu_ms_avg / 1000.0));
             }
-            stat(ui, "Checked by", &format!("graphics {} · processor {}", theme::thousands(st.gpu_photos as usize), theme::thousands(st.cpu_photos as usize)));
+            stat(
+                ui,
+                "Checked by",
+                &format!("graphics {} · processor {}", theme::thousands(st.gpu_photos as usize), theme::thousands(st.cpu_photos as usize)),
+            );
             if st.gpu_fallbacks > 0 {
                 stat(ui, "Handed to the processor", &format!("{}", st.gpu_fallbacks));
             }

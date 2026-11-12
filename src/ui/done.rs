@@ -127,20 +127,31 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         let gs = g.size();
         ui.painter().galley(text_pos, g, theme::INK);
         let t = if app.reduced_motion { 1.0 } else { marks::ease_out((since as f32 * 1000.0) / marks::DRAW_MS) };
-        marks::hero(ui, Rect::from_min_size(text_pos - vec2(size * 0.2, size * 0.02), vec2(gs.x + size * 0.4, gs.y * 0.95)), theme::RED, (size / 40.0).clamp(3.0, 6.0), t);
+        marks::hero(
+            ui,
+            Rect::from_min_size(text_pos - vec2(size * 0.2, size * 0.02), vec2(gs.x + size * 0.4, gs.y * 0.95)),
+            theme::RED,
+            (size / 40.0).clamp(3.0, 6.0),
+            t,
+        );
         ui.label(theme::xp(format!("keepers, circled from {} photos", theme::thousands(total)), 26.0, theme::INK));
         ui.add_space(28.0);
 
         // 3-column stat grid.
         let reasons = {
-            let mut v: Vec<(String, usize)> = s.reject_reasons.iter().map(|(k, n)| (super::review::reason_words(k).to_lowercase(), *n)).collect();
-            v.sort_by(|a, b| b.1.cmp(&a.1));
+            let mut v: Vec<(String, usize)> =
+                s.reject_reasons.iter().map(|(k, n)| (super::review::reason_words(k).to_lowercase(), *n)).collect();
+            v.sort_by_key(|a| std::cmp::Reverse(a.1));
             v.iter().take(3).map(|(k, n)| format!("{k} {n}")).collect::<Vec<_>>().join(" · ")
         };
         let closes = rv.close_call_groups().len();
         let stats = [
             ("Moments", theme::thousands(s.groups), format!("{} photos checked", theme::thousands(s.analyzed))),
-            ("Close calls settled", format!("{} / {}", rv.settled.len(), closes), format!("{} for Glim", theme::plural(app.settings.treats as usize, "treat"))),
+            (
+                "Close calls settled",
+                format!("{} / {}", rv.settled.len(), closes),
+                format!("{} for Glim", theme::plural(app.settings.treats as usize, "treat")),
+            ),
             ("Set aside", theme::thousands(s.rejects + s.failed), if reasons.is_empty() { "nothing".into() } else { reasons }),
         ];
         let cw = (w - 32.0) / 3.0;

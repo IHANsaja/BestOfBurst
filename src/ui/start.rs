@@ -8,6 +8,8 @@ use super::marks;
 use super::theme;
 
 /// One tool card: number, title, what it does, and a call to action. Returns true when chosen.
+// Each argument is one piece of what the card shows; a struct would only rename them.
+#[allow(clippy::too_many_arguments)]
 fn card(ui: &mut Ui, rect: Rect, no: &str, title: &str, text: &str, action: &str, key: &str, primary: bool) -> bool {
     let resp = ui.interact(rect, ui.scope_id().with(no), Sense::click());
     resp.widget_info(|| WidgetInfo::labeled(Role::Button, true, title));
@@ -17,15 +19,39 @@ fn card(ui: &mut Ui, rect: Rect, no: &str, title: &str, text: &str, action: &str
     p.rect_filled(rect, 0.0, bg);
     p.rect_stroke(rect, 0.0, Stroke::new(2.0, theme::INK), StrokeKind::Inside);
     let x = rect.min.x + 28.0;
-    theme::text_at(ui, pos2(x, rect.min.y + 30.0), Align2::LEFT_CENTER, no, theme::f_mono_semi(11.0), if hover { theme::EDGE } else { theme::GRAPHITE }, 0.9);
+    theme::text_at(
+        ui,
+        pos2(x, rect.min.y + 30.0),
+        Align2::LEFT_CENTER,
+        no,
+        theme::f_mono_semi(11.0),
+        if hover { theme::EDGE } else { theme::GRAPHITE },
+        0.9,
+    );
     let size = theme::fit_size(ui, title, 34.0, rect.width() - 56.0, false);
     theme::text_at(ui, pos2(x, rect.min.y + 74.0), Align2::LEFT_CENTER, title, theme::f_xp(size), fg, 0.4);
     let g = ui.painter().layout(text.to_string(), theme::f_body(15.0), sub, rect.width() - 56.0);
     ui.painter().galley(pos2(x, rect.min.y + 108.0), g, sub);
     // Action bar along the bottom.
     let bar = Rect::from_min_max(pos2(rect.min.x, rect.max.y - 56.0), rect.max);
-    let fill = if primary { if hover { theme::RED_HOVER } else { theme::RED } } else if hover { theme::TABLE } else { theme::INK };
-    let on = if primary { theme::PAPER_WHITE } else if hover { theme::INK } else { theme::TABLE };
+    let fill = if primary {
+        if hover {
+            theme::RED_HOVER
+        } else {
+            theme::RED
+        }
+    } else if hover {
+        theme::TABLE
+    } else {
+        theme::INK
+    };
+    let on = if primary {
+        theme::PAPER_WHITE
+    } else if hover {
+        theme::INK
+    } else {
+        theme::TABLE
+    };
     ui.painter().rect_filled(bar, 0.0, fill);
     theme::text_at(ui, pos2(bar.min.x + 28.0, bar.center().y), Align2::LEFT_CENTER, &action.to_uppercase(), theme::f_xp(14.0), on, 0.5);
     theme::keycap(ui, pos2(bar.max.x - 22.0, bar.center().y), key, on);

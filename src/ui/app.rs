@@ -16,12 +16,12 @@ use super::textures::Textures;
 use super::theme::{self, Pal};
 use super::{compare, corner, done, find, focus, help, home, marks, progress, remover, review, start, viewer};
 use crate::engine::EngineChoice;
-use crate::sysmon::{self, Monitor, Snapshot};
 use crate::engine::{self, Event, RunConfig};
 use crate::output::OutputSummary;
 use crate::rank::{Keep, Preset, RankSummary};
 use crate::scan;
 use crate::state::State;
+use crate::sysmon::{self, Monitor, Snapshot};
 
 /// A safelight break is suggested after this much continuous review.
 pub const BREAK_AFTER: Duration = Duration::from_secs(20 * 60);
@@ -208,9 +208,8 @@ impl BestOfBurstApp {
         theme::install_fonts(&cc.egui_ctx);
         let settings: Settings = load_json("settings.json").unwrap_or_default();
         theme::apply_visuals(&cc.egui_ctx, theme::pal(settings.night));
-        let recent: Vec<PathBuf> = load_json::<Vec<String>>("recent.json")
-            .map(|v| v.into_iter().map(PathBuf::from).collect())
-            .unwrap_or_default();
+        let recent: Vec<PathBuf> =
+            load_json::<Vec<String>>("recent.json").map(|v| v.into_iter().map(PathBuf::from).collect()).unwrap_or_default();
         let (bg_tx, bg_rx) = mpsc::channel();
         let mut app = BestOfBurstApp {
             screen: Screen::Home,
@@ -278,11 +277,7 @@ impl BestOfBurstApp {
     }
 
     pub fn shoot_name(&self) -> String {
-        self.folder
-            .as_ref()
-            .and_then(|f| f.file_name())
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "No shoot".into())
+        self.folder.as_ref().and_then(|f| f.file_name()).map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "No shoot".into())
     }
 
     pub fn open_help(&mut self) {
@@ -360,14 +355,9 @@ impl BestOfBurstApp {
                 Event::Warning(w) => send(EngineMsg::Warning(w)),
                 Event::Engine(e) => send(EngineMsg::Warning(e)),
                 Event::Scanned { total, new, .. } => send(EngineMsg::Scanned { total, new }),
-                Event::Progress { done, total, per_sec, eta_s, last, last_thumb } => send(EngineMsg::Progress {
-                    done,
-                    total,
-                    per_sec,
-                    eta_s,
-                    last: last.map(PathBuf::from),
-                    last_thumb,
-                }),
+                Event::Progress { done, total, per_sec, eta_s, last, last_thumb } => {
+                    send(EngineMsg::Progress { done, total, per_sec, eta_s, last: last.map(PathBuf::from), last_thumb })
+                }
                 Event::Failed { path, error } => send(EngineMsg::Failed { path: PathBuf::from(path), error }),
             });
             match res {
@@ -577,23 +567,28 @@ impl BestOfBurstApp {
         let rise = if self.reduced_motion { 0.0 } else { (1.0 - (age / 0.18).min(1.0)) * 16.0 };
         #[allow(deprecated)]
         let id = egui::Id::new("bob_toast");
-        let shown = egui::Area::new(id).order(egui::Order::Foreground).anchor(Align2::CENTER_BOTTOM, vec2(0.0, -26.0 + rise)).show(ctx, |ui| {
-            let edge = if err { theme::SAFELIGHT } else { theme::TABLE };
-            let frame = egui::Frame::new()
-                .fill(theme::INK)
-                .stroke(egui::Stroke::new(1.5, theme::RULE_STRONG))
-                .inner_margin(egui::Margin { left: 22, right: 18, top: 12, bottom: 12 });
-            let r = frame
-                .show(ui, |ui| {
-                    ui.set_max_width(620.0);
-                    ui.label(theme::mono(if err { "Needs a look" } else { "Done" }, 10.5, if err { theme::SAFELIGHT_SOFT } else { theme::EDGE }));
-                    ui.label(theme::body(&text, 14.5, theme::TABLE));
-                })
-                .response
-                .rect;
-            ui.painter().rect_filled(Rect::from_min_size(r.min, vec2(4.0, r.height())), 0.0, edge);
-            ui.interact(r, id.with("click"), Sense::click()).on_hover_text("Click to dismiss")
-        });
+        let shown =
+            egui::Area::new(id).order(egui::Order::Foreground).anchor(Align2::CENTER_BOTTOM, vec2(0.0, -26.0 + rise)).show(ctx, |ui| {
+                let edge = if err { theme::SAFELIGHT } else { theme::TABLE };
+                let frame = egui::Frame::new()
+                    .fill(theme::INK)
+                    .stroke(egui::Stroke::new(1.5, theme::RULE_STRONG))
+                    .inner_margin(egui::Margin { left: 22, right: 18, top: 12, bottom: 12 });
+                let r = frame
+                    .show(ui, |ui| {
+                        ui.set_max_width(620.0);
+                        ui.label(theme::mono(
+                            if err { "Needs a look" } else { "Done" },
+                            10.5,
+                            if err { theme::SAFELIGHT_SOFT } else { theme::EDGE },
+                        ));
+                        ui.label(theme::body(&text, 14.5, theme::TABLE));
+                    })
+                    .response
+                    .rect;
+                ui.painter().rect_filled(Rect::from_min_size(r.min, vec2(4.0, r.height())), 0.0, edge);
+                ui.interact(r, id.with("click"), Sense::click()).on_hover_text("Click to dismiss")
+            });
         shown.inner.widget_info(|| WidgetInfo::labeled(Role::Status, true, &text));
         if shown.inner.clicked() {
             self.message = None;
@@ -696,7 +691,13 @@ fn window_controls(ui: &mut Ui) {
         let (rect, resp) = ui.allocate_exact_size(vec2(52.0, HEADER_H), Sense::click());
         let label = match b {
             WinButton::Minimize => "Minimize",
-            WinButton::Maximize => if maxed { "Restore" } else { "Maximize" },
+            WinButton::Maximize => {
+                if maxed {
+                    "Restore"
+                } else {
+                    "Maximize"
+                }
+            }
             WinButton::Close => "Close",
         };
         resp.widget_info(|| WidgetInfo::labeled(Role::Button, true, label));

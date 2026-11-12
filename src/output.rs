@@ -133,10 +133,7 @@ pub fn write_folders(input: &Path, out: &Path, entries: &[Entry], opts: OutputOp
     if opts.rejects {
         let dir = out.join("rejects");
         let mut used: BTreeMap<String, HashSet<String>> = BTreeMap::new();
-        let mut rejects: Vec<&Entry> = entries
-            .iter()
-            .filter(|e| matches!(e.effective(), Status::Reject | Status::Failed))
-            .collect();
+        let mut rejects: Vec<&Entry> = entries.iter().filter(|e| matches!(e.effective(), Status::Reject | Status::Failed)).collect();
         rejects.sort_by(|a, b| better(a, b));
         for e in rejects {
             let reason = e.reasons.first().cloned().unwrap_or_else(|| "manual".into());
@@ -175,11 +172,7 @@ pub fn with_ending(name: &str, ending: &str) -> String {
 pub fn write_name_lists(dir: &Path, base: &str, paths: &[String], ending: &str) -> Result<(PathBuf, PathBuf)> {
     std::fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
     let mut seen = HashSet::new();
-    let names: Vec<String> = paths
-        .iter()
-        .map(|p| with_ending(&file_name(p), ending))
-        .filter(|n| seen.insert(n.to_lowercase()))
-        .collect();
+    let names: Vec<String> = paths.iter().map(|p| with_ending(&file_name(p), ending)).filter(|n| seen.insert(n.to_lowercase())).collect();
     let txt = dir.join(format!("{base}.txt"));
     let csv_path = dir.join(format!("{base}.csv"));
     let mut text = names.join("\r\n");
@@ -197,7 +190,11 @@ pub fn write_name_lists(dir: &Path, base: &str, paths: &[String], ending: &str) 
 fn r3(v: f32) -> String {
     let s = format!("{v:.3}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
-    if s.is_empty() || s == "-" { "0".into() } else { s.to_string() }
+    if s.is_empty() || s == "-" {
+        "0".into()
+    } else {
+        s.to_string()
+    }
 }
 
 /// One row per file: picks by rank, then maybe by score, then rejects by score, then failed.
@@ -207,9 +204,28 @@ pub fn write_report(out: &Path, state: &State, entries: &[Entry]) -> Result<()> 
     {
         let mut w = csv::Writer::from_path(&tmp).with_context(|| format!("cannot write {}", tmp.display()))?;
         w.write_record([
-            "rank", "status", "score", "file", "reasons", "group", "group_size", "sharpness", "tenengrad",
-            "mean_luma", "clip_highlights", "clip_shadows", "contrast", "noise", "colorfulness", "capture_time",
-            "format", "decoder", "error", "faces", "blinks", "eyes_closed_on_purpose",
+            "rank",
+            "status",
+            "score",
+            "file",
+            "reasons",
+            "group",
+            "group_size",
+            "sharpness",
+            "tenengrad",
+            "mean_luma",
+            "clip_highlights",
+            "clip_shadows",
+            "contrast",
+            "noise",
+            "colorfulness",
+            "capture_time",
+            "format",
+            "decoder",
+            "error",
+            "faces",
+            "blinks",
+            "eyes_closed_on_purpose",
         ])?;
         let bucket = |e: &Entry| match e.effective() {
             Status::Pick => 0,

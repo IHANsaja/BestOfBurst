@@ -74,15 +74,11 @@ pub fn decode_jpeg_bytes(data: &[u8]) -> Result<RgbImage> {
     let pixels = dec.decode().map_err(|e| anyhow!("jpeg: {e:?}"))?;
     let (w, h) = (info.width as u32, info.height as u32);
     let n = (w as usize) * (h as usize);
-    let channels = if n == 0 { 0 } else { pixels.len() / n };
+    let channels = pixels.len().checked_div(n).unwrap_or(0);
     match channels {
         3 => RgbImage::new(w, h, pixels),
         1 => RgbImage::new(w, h, pixels.iter().flat_map(|&v| [v, v, v]).collect()),
-        c if c > 3 => RgbImage::new(
-            w,
-            h,
-            pixels.chunks_exact(c).flat_map(|p| [p[0], p[1], p[2]]).collect(),
-        ),
+        c if c > 3 => RgbImage::new(w, h, pixels.chunks_exact(c).flat_map(|p| [p[0], p[1], p[2]]).collect()),
         _ => bail!("jpeg: unexpected channel count"),
     }
 }
@@ -111,9 +107,7 @@ fn decode_with_image(data: &[u8], format: Format) -> Result<RgbImage> {
 
 fn decode_jxl(data: &[u8]) -> Result<RgbImage> {
     use jxl_oxide::{EnumColourEncoding, JxlImage, RenderingIntent};
-    let mut img = JxlImage::builder()
-        .read(std::io::Cursor::new(data))
-        .map_err(|e| anyhow!("jxl: {e}"))?;
+    let mut img = JxlImage::builder().read(std::io::Cursor::new(data)).map_err(|e| anyhow!("jxl: {e}"))?;
     img.request_color_encoding(EnumColourEncoding::srgb(RenderingIntent::Relative));
     let render = img.render_frame(0).map_err(|e| anyhow!("jxl: {e}"))?;
     let mut stream = render.stream_no_alpha();
@@ -150,40 +144,22 @@ pub fn decode_full(path: &Path, format: Format) -> Result<Decoded> {
     let read = || std::fs::read(path).with_context(|| format!("cannot read {}", path.display()));
 
     let first: Option<Result<Decoded>> = match format {
-        Format::Jpeg => Some(read().and_then(|d| decode_jpeg_bytes(&d)).map(|image| Decoded {
-            image,
-            decoder: Decoder::ZuneJpeg,
-        })),
+        Format::Jpeg => Some(read().and_then(|d| decode_jpeg_bytes(&d)).map(|image| Decoded { image, decoder: Decoder::ZuneJpeg })),
         Format::Png | Format::Webp | Format::Bmp | Format::Gif | Format::Tga | Format::Qoi | Format::Pnm => {
-            Some(read().and_then(|d| decode_with_image(&d, format)).map(|image| Decoded {
-                image,
-                decoder: Decoder::Image,
-            }))
+            Some(read().and_then(|d| decode_with_image(&d, format)).map(|image| Decoded { image, decoder: Decoder::Image }))
         }
         Format::Tiff => {
-            let r = read().and_then(|d| decode_with_image(&d, format)).map(|image| Decoded {
-                image,
-                decoder: Decoder::Image,
-            });
+            let r = read().and_then(|d| decode_with_image(&d, format)).map(|image| Decoded { image, decoder: Decoder::Image });
             match r {
                 Ok(d) => Some(Ok(d)),
                 Err(e) => {
                     errors.push(format!("{e:#}"));
-                    Some(decode_raw_preview(path).map(|image| Decoded {
-                        image,
-                        decoder: Decoder::RawPreview,
-                    }))
+                    Some(decode_raw_preview(path).map(|image| Decoded { image, decoder: Decoder::RawPreview }))
                 }
             }
         }
-        Format::Jxl => Some(read().and_then(|d| decode_jxl(&d)).map(|image| Decoded {
-            image,
-            decoder: Decoder::JxlOxide,
-        })),
-        Format::Raw => Some(decode_raw_preview(path).map(|image| Decoded {
-            image,
-            decoder: Decoder::RawPreview,
-        })),
+        Format::Jxl => Some(read().and_then(|d| decode_jxl(&d)).map(|image| Decoded { image, decoder: Decoder::JxlOxide })),
+        Format::Raw => Some(decode_raw_preview(path).map(|image| Decoded { image, decoder: Decoder::RawPreview })),
         Format::Heif | Format::Avif | Format::Jxr => None,
     };
 
@@ -226,14 +202,11 @@ pub fn resize_long_edge(img: RgbImage, edge: u32) -> Result<RgbImage> {
         return Ok(img);
     }
     let (nw, nh) = target_dims(img.width, img.height, edge);
-    let src = fr::images::Image::from_vec_u8(img.width, img.height, img.rgb, fr::PixelType::U8x3)
-        .map_err(|e| anyhow!("resize: {e:?}"))?;
+    let src = fr::images::Image::from_vec_u8(img.width, img.height, img.rgb, fr::PixelType::U8x3).map_err(|e| anyhow!("resize: {e:?}"))?;
     let mut dst = fr::images::Image::new(nw, nh, fr::PixelType::U8x3);
     let mut resizer = fr::Resizer::new();
     let opts = fr::ResizeOptions::new().resize_alg(fr::ResizeAlg::Convolution(fr::FilterType::CatmullRom));
-    resizer
-        .resize(&src, &mut dst, &opts)
-        .map_err(|e| anyhow!("resize: {e:?}"))?;
+    resizer.resize(&src, &mut dst, &opts).map_err(|e| anyhow!("resize: {e:?}"))?;
     RgbImage::new(nw, nh, dst.into_vec())
 }
 
@@ -244,14 +217,11 @@ pub fn resize_ref(img: &RgbImage, edge: u32) -> Result<RgbImage> {
     }
     let (nw, nh) = target_dims(img.width, img.height, edge);
     let n = img.width as usize * img.height as usize * 3;
-    let src = fr::images::ImageRef::new(img.width, img.height, &img.rgb[..n], fr::PixelType::U8x3)
-        .map_err(|e| anyhow!("resize: {e:?}"))?;
+    let src = fr::images::ImageRef::new(img.width, img.height, &img.rgb[..n], fr::PixelType::U8x3).map_err(|e| anyhow!("resize: {e:?}"))?;
     let mut dst = fr::images::Image::new(nw, nh, fr::PixelType::U8x3);
     let mut resizer = fr::Resizer::new();
     let opts = fr::ResizeOptions::new().resize_alg(fr::ResizeAlg::Convolution(fr::FilterType::Bilinear));
-    resizer
-        .resize(&src, &mut dst, &opts)
-        .map_err(|e| anyhow!("resize: {e:?}"))?;
+    resizer.resize(&src, &mut dst, &opts).map_err(|e| anyhow!("resize: {e:?}"))?;
     RgbImage::new(nw, nh, dst.into_vec())
 }
 
@@ -260,14 +230,11 @@ pub fn resize_exact(img: RgbImage, w: u32, h: u32) -> Result<RgbImage> {
     if img.width == w && img.height == h {
         return Ok(img);
     }
-    let src = fr::images::Image::from_vec_u8(img.width, img.height, img.rgb, fr::PixelType::U8x3)
-        .map_err(|e| anyhow!("resize: {e:?}"))?;
+    let src = fr::images::Image::from_vec_u8(img.width, img.height, img.rgb, fr::PixelType::U8x3).map_err(|e| anyhow!("resize: {e:?}"))?;
     let mut dst = fr::images::Image::new(w.max(1), h.max(1), fr::PixelType::U8x3);
     let mut resizer = fr::Resizer::new();
     let opts = fr::ResizeOptions::new().resize_alg(fr::ResizeAlg::Convolution(fr::FilterType::CatmullRom));
-    resizer
-        .resize(&src, &mut dst, &opts)
-        .map_err(|e| anyhow!("resize: {e:?}"))?;
+    resizer.resize(&src, &mut dst, &opts).map_err(|e| anyhow!("resize: {e:?}"))?;
     RgbImage::new(w.max(1), h.max(1), dst.into_vec())
 }
 
@@ -301,10 +268,9 @@ pub fn read_orientation(path: &Path, format: Format) -> u32 {
         if let Some(o) = from(&mut cr3) {
             return o;
         }
-        if let Some(o) = raw_embedded_exif(path).and_then(|ex| {
-            ex.get_field(exif::Tag::Orientation, exif::In::PRIMARY)
-                .and_then(|f| f.value.get_uint(0))
-        }) {
+        if let Some(o) =
+            raw_embedded_exif(path).and_then(|ex| ex.get_field(exif::Tag::Orientation, exif::In::PRIMARY).and_then(|f| f.value.get_uint(0)))
+        {
             return o;
         }
     }

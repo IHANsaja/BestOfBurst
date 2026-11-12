@@ -73,6 +73,14 @@ pub fn logical() -> usize {
     std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1)
 }
 
+/// Memory free for new work right now, in MB (GlobalMemoryStatusEx).
+pub fn available_memory_mb() -> Option<u64> {
+    use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+    let mut s = MEMORYSTATUSEX { dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32, ..Default::default() };
+    // SAFETY: `s` is a properly sized MEMORYSTATUSEX with dwLength set, as the call requires.
+    unsafe { GlobalMemoryStatusEx(&mut s).ok().map(|_| s.ullAvailPhys / (1024 * 1024)) }
+}
+
 /// Physical cores from GetLogicalProcessorInformation.
 pub fn physical_cores() -> usize {
     use windows::Win32::System::SystemInformation::{
@@ -166,10 +174,10 @@ impl Pdh {
 
     /// (whole card %, this process %): the busiest engine type, summed over its instances.
     fn sample(&mut self) -> (Option<f32>, Option<f32>) {
+        use std::collections::HashMap;
         use windows::Win32::System::Performance::{
             PdhCollectQueryData, PdhGetFormattedCounterArrayW, PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT_DOUBLE,
         };
-        use std::collections::HashMap;
         // SAFETY: the buffer is sized by the first call and only read within its item count.
         unsafe {
             if PdhCollectQueryData(self.query) != 0 {

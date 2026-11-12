@@ -301,13 +301,7 @@ pub fn entries_from_state(state: &State) -> Vec<Entry> {
                         tiles[k] = *v;
                     }
                 }
-                let mut e = Entry::new(
-                    path,
-                    m.clone(),
-                    tiles,
-                    f.dhash_u64().unwrap_or(0),
-                    f.capture_ms.unwrap_or(f.mtime_ms),
-                );
+                let mut e = Entry::new(path, m.clone(), tiles, f.dhash_u64().unwrap_or(0), f.capture_ms.unwrap_or(f.mtime_ms));
                 e.faces = f.faces.clone().unwrap_or_default();
                 e
             }
@@ -347,7 +341,7 @@ pub fn group_entries(e: &mut [Entry]) {
                     continue;
                 }
                 let d = hamming(e[i].dhash, e[g.first].dhash);
-                if d <= LOOKBACK_HASH && best.map_or(true, |(bd, _)| d < bd) {
+                if d <= LOOKBACK_HASH && best.is_none_or(|(bd, _)| d < bd) {
                     best = Some((d, gi));
                 }
             }
@@ -366,10 +360,8 @@ pub fn group_entries(e: &mut [Entry]) {
         e[i].group = gi as u64;
         prev = Some(i);
     }
-    let mut next = groups.len() as u64;
-    for x in e.iter_mut().filter(|x| !x.ok) {
-        x.group = next;
-        next += 1;
+    for (x, g) in e.iter_mut().filter(|x| !x.ok).zip(groups.len() as u64..) {
+        x.group = g;
     }
     let mut sizes: BTreeMap<u64, usize> = BTreeMap::new();
     for x in e.iter() {
@@ -521,12 +513,7 @@ pub fn exposure(m: &Metrics) -> f32 {
 // SPEC-GAP: the spec leaves rejected files' percentiles open; they are interpolated against
 // the eligible set so their report scores stay comparable.
 fn percentiles(values: &[f32], eligible: &[bool]) -> Vec<f32> {
-    let mut sorted: Vec<f32> = values
-        .iter()
-        .zip(eligible)
-        .filter(|(_, &ok)| ok)
-        .map(|(v, _)| *v)
-        .collect();
+    let mut sorted: Vec<f32> = values.iter().zip(eligible).filter(|(_, &ok)| ok).map(|(v, _)| *v).collect();
     sorted.sort_by(|a, b| a.total_cmp(b));
     let n = sorted.len();
     values
@@ -581,10 +568,7 @@ pub fn subject_sharpness(group: &[&Entry]) -> Vec<f32> {
     let max_t: Vec<f32> = (0..64).map(|t| group.iter().map(|f| f.tiles[t]).fold(0.0, f32::max)).collect();
     let peak = max_t.iter().cloned().fold(0.0, f32::max);
     let subject: Vec<usize> = (0..64).filter(|&t| peak > 0.0 && max_t[t] >= 0.5 * peak).collect();
-    group
-        .iter()
-        .map(|f| subject.iter().map(|&t| f.tiles[t] / max_t[t]).sum::<f32>() / subject.len().max(1) as f32)
-        .collect()
+    group.iter().map(|f| subject.iter().map(|&t| f.tiles[t] / max_t[t]).sum::<f32>() / subject.len().max(1) as f32).collect()
 }
 
 /// Centre of the subject tiles as 0..1 fractions.
@@ -595,8 +579,8 @@ pub fn subject_center(group: &[&Entry]) -> [f32; 2] {
         return [0.5, 0.5];
     }
     let (mut sx, mut sy, mut n) = (0.0f32, 0.0f32, 0.0f32);
-    for t in 0..64 {
-        if max_t[t] >= 0.5 * peak {
+    for (t, &m) in max_t.iter().enumerate() {
+        if m >= 0.5 * peak {
             sx += (t % 8) as f32 + 0.5;
             sy += (t / 8) as f32 + 0.5;
             n += 1.0;
@@ -607,18 +591,12 @@ pub fn subject_center(group: &[&Entry]) -> [f32; 2] {
 
 /// Inside a group: group score desc, then score, then path.
 pub fn better_in_group(a: &Entry, b: &Entry) -> Ordering {
-    b.group_score
-        .total_cmp(&a.group_score)
-        .then_with(|| b.score.total_cmp(&a.score))
-        .then_with(|| a.path.cmp(&b.path))
+    b.group_score.total_cmp(&a.group_score).then_with(|| b.score.total_cmp(&a.score)).then_with(|| a.path.cmp(&b.path))
 }
 
 /// Across groups: score desc, then sharpness desc, then path asc.
 pub fn better(a: &Entry, b: &Entry) -> Ordering {
-    b.score
-        .total_cmp(&a.score)
-        .then_with(|| b.metrics.sharpness.total_cmp(&a.metrics.sharpness))
-        .then_with(|| a.path.cmp(&b.path))
+    b.score.total_cmp(&a.score).then_with(|| b.metrics.sharpness.total_cmp(&a.metrics.sharpness)).then_with(|| a.path.cmp(&b.path))
 }
 
 /// Step 3b: group scores, close calls and subject centres.
@@ -673,20 +651,13 @@ pub fn select(e: &mut [Entry], target: usize, max_per_group: usize) {
     for g in groups.values_mut() {
         g.sort_by(|&a, &b| better_in_group(&e[a], &e[b]));
     }
-    let mut picks: Vec<usize> = groups
-        .values()
-        .map(|g| g[0])
-        .filter(|&i| e[i].group_size >= SURE_GROUP_MIN)
-        .collect();
+    let mut picks: Vec<usize> = groups.values().map(|g| g[0]).filter(|&i| e[i].group_size >= SURE_GROUP_MIN).collect();
     for round in 0..max_per_group.max(1) {
         if picks.len() >= target {
             break;
         }
-        let mut tier: Vec<usize> = groups
-            .values()
-            .filter_map(|g| g.get(round).copied())
-            .filter(|i| !(round == 0 && e[*i].group_size >= SURE_GROUP_MIN))
-            .collect();
+        let mut tier: Vec<usize> =
+            groups.values().filter_map(|g| g.get(round).copied()).filter(|i| !(round == 0 && e[*i].group_size >= SURE_GROUP_MIN)).collect();
         tier.sort_by(|&a, &b| better(&e[a], &e[b]));
         for i in tier {
             if picks.len() >= target {
@@ -820,11 +791,7 @@ pub fn store(state: &mut State, r: &Ranking) {
             },
         );
     }
-    let groups = r
-        .centers
-        .iter()
-        .map(|(g, c)| (*g, GroupInfo { subject_center: [round2(c[0]), round2(c[1])] }))
-        .collect();
+    let groups = r.centers.iter().map(|(g, c)| (*g, GroupInfo { subject_center: [round2(c[0]), round2(c[1])] })).collect();
     state.last_rank = Some(LastRank {
         ranked_at: crate::state::now_string(),
         preset: r.preset.name().to_string(),

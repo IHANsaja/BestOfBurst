@@ -91,7 +91,12 @@ fn picks_respect_target_group_limit_and_rejects() {
     // Three groups of four frames, plus a blurry and a black frame.
     for (g, h) in [A, B, C].iter().enumerate() {
         for k in 0..4 {
-            e.push(entry(&format!("g{g}_{k}"), 400.0 + (k * 50) as f32 + g as f32, near(*h, k as u32), (g as i64) * 100_000 + k as i64 * 500));
+            e.push(entry(
+                &format!("g{g}_{k}"),
+                400.0 + (k * 50) as f32 + g as f32,
+                near(*h, k as u32),
+                (g as i64) * 100_000 + k as i64 * 500,
+            ));
         }
     }
     let mut blurry = entry("blurry", 3.0, D, 900_000);
@@ -316,7 +321,7 @@ fn make_shoot(dir: &std::path::Path) {
     std::fs::write(dir.join("notes.xmp"), vec![b'x'; 20_000]).unwrap();
     std::fs::write(dir.join("broken.jpg"), {
         let mut v = vec![0xFF, 0xD8, 0xFF, 0xE0];
-        v.extend(std::iter::repeat(0x11).take(20_000));
+        v.extend(std::iter::repeat_n(0x11, 20_000));
         v
     })
     .unwrap();
@@ -345,7 +350,8 @@ fn full_run_resume_output_and_originals_untouched() {
     assert!(summary.errors.is_empty());
 
     // Picks are rank-prefixed; each shot pair contributes at most one pick.
-    let mut names: Vec<String> = std::fs::read_dir(out.join("picks")).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+    let mut names: Vec<String> =
+        std::fs::read_dir(out.join("picks")).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
     names.sort();
     assert_eq!(names.len(), 4);
     assert!(names[0].starts_with("0001_IMG_"), "{names:?}");
@@ -377,7 +383,8 @@ fn full_run_resume_output_and_originals_untouched() {
     engine::rank_and_output(&mut st, &copy_cfg).unwrap();
     assert!(out.join("mine.txt").exists());
     assert!(!out.join("picks").join("stale.jpg").exists());
-    let names: Vec<String> = std::fs::read_dir(out.join("picks")).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+    let names: Vec<String> =
+        std::fs::read_dir(out.join("picks")).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
     assert_eq!(names.len(), 2);
     assert!(names.iter().all(|n| n.starts_with("IMG_")), "{names:?}");
 

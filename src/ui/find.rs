@@ -93,7 +93,8 @@ fn deliver(app: &mut BestOfBurstApp, rv: &mut Review, ctx: &egui::Context) {
         return;
     }
     if app.find.circle {
-        let picks: Vec<usize> = report.matches.iter().filter_map(|m| m.original()).filter_map(|p| app.find.lookup.get(p).copied()).collect();
+        let picks: Vec<usize> =
+            report.matches.iter().filter_map(|m| m.original()).filter_map(|p| app.find.lookup.get(p).copied()).collect();
         // One circle per frame: the twin of a RAW + JPEG pair is delivered, not circled twice.
         for i in picks {
             if rv.ranking.entries[i].effective() != Status::Pick {
@@ -116,7 +117,11 @@ fn deliver(app: &mut BestOfBurstApp, rv: &mut Review, ctx: &egui::Context) {
             if clean {
                 let stop = AtomicBool::new(false);
                 let c = crate::clean::clean_all(&input, &matches, &out.join(crate::clean::CLEAN_DIR), &stop, |_, _| {})?;
-                s.notes.push(format!("{} without the watermark in the \"{}\" folder", theme::plural(c.written, "preview"), crate::clean::CLEAN_DIR));
+                s.notes.push(format!(
+                    "{} without the watermark in the \"{}\" folder",
+                    theme::plural(c.written, "preview"),
+                    crate::clean::CLEAN_DIR
+                ));
                 if !c.errors.is_empty() {
                     s.notes.push(format!("{} couldn't be cleaned", c.errors.len()));
                 }
@@ -151,16 +156,20 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
     }
 
     // Anything dropped on this screen is a batch to match.
-    let dropped: Vec<PathBuf> = ctx.input(|i| {
-        i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect()
-    });
+    let dropped: Vec<PathBuf> =
+        ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
     let hovering = ctx.input(|i| !i.raw.hovered_files.is_empty());
     if !dropped.is_empty() {
         start(app, rv, dropped, &ctx);
     }
 
     let shoot = app.shoot_name();
-    let to_copy = app.find.report.as_ref().map(|r| r.matches.iter().flat_map(|m| m.originals()).collect::<std::collections::HashSet<_>>().len()).unwrap_or(0);
+    let to_copy = app
+        .find
+        .report
+        .as_ref()
+        .map(|r| r.matches.iter().flat_map(|m| m.originals()).collect::<std::collections::HashSet<_>>().len())
+        .unwrap_or(0);
     let (mut home, mut back) = (false, false);
     app::chrome_bar(
         ui,
@@ -172,7 +181,8 @@ fn view(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui) -> Nav {
         },
         |ui| {
             if to_copy > 0 {
-                let label = if app.find.writing { "Copying...".to_string() } else { format!("Copy {} originals", theme::thousands(to_copy)) };
+                let label =
+                    if app.find.writing { "Copying...".to_string() } else { format!("Copy {} originals", theme::thousands(to_copy)) };
                 go |= app::red_cell(ui, &label, "Ctrl E", !app.find.writing);
             }
             ui.add_space(16.0);
@@ -264,8 +274,24 @@ fn drop_zone(ui: &mut Ui, p: Pal, hovering: bool) -> Option<Vec<PathBuf>> {
             ui.painter().extend(egui::Shape::dashed_line(&[seg[0], seg[1]], s, 10.0, 6.0));
         }
     }
-    theme::text_at(ui, zone.center() - vec2(0.0, 18.0), Align2::CENTER_CENTER, "DROP THE PHOTOS YOU WERE SENT", theme::f_xp(22.0), theme::INK, 0.6);
-    theme::text_at(ui, zone.center() + vec2(0.0, 18.0), Align2::CENTER_CENTER, "previews, screenshots of a gallery, or full photos · or click to choose", theme::f_mono(11.0), theme::GRAPHITE, 0.4);
+    theme::text_at(
+        ui,
+        zone.center() - vec2(0.0, 18.0),
+        Align2::CENTER_CENTER,
+        "DROP THE PHOTOS YOU WERE SENT",
+        theme::f_xp(22.0),
+        theme::INK,
+        0.6,
+    );
+    theme::text_at(
+        ui,
+        zone.center() + vec2(0.0, 18.0),
+        Align2::CENTER_CENTER,
+        "previews, screenshots of a gallery, or full photos · or click to choose",
+        theme::f_mono(11.0),
+        theme::GRAPHITE,
+        0.4,
+    );
     theme::focus_ring(ui, &resp);
     if resp.clicked() {
         chosen = pick_files();
@@ -451,7 +477,9 @@ fn results(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui, p: Pal, nav: 
                     (name, format!("{sent_name}  ·  {sim:.0}% alike  ·  {how}"))
                 }
                 Verdict::NotFound => ("Not in this shoot".to_string(), sent_name),
-                Verdict::Failed => ("Couldn't open this file".to_string(), format!("{sent_name}  ·  {}", m.error.clone().unwrap_or_default())),
+                Verdict::Failed => {
+                    ("Couldn't open this file".to_string(), format!("{sent_name}  ·  {}", m.error.clone().unwrap_or_default()))
+                }
             };
             theme::text_at(ui, pos2(tx, row.min.y + 22.0), Align2::LEFT_CENTER, &title, theme::f_xp(16.0), theme::INK, 0.3);
             theme::text_at(ui, pos2(tx, row.min.y + 44.0), Align2::LEFT_CENTER, &sub, theme::f_mono(10.5), theme::GRAPHITE, 0.3);
@@ -485,7 +513,15 @@ fn results(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui, p: Pal, nav: 
                     let other = Rect::from_min_size(pos2(x.get() - 96.0, row.min.y + 8.0), vec2(88.0, ROW_H - 62.0));
                     let t = original_thumb(app, rv, &r.path);
                     film_thumb(ui, other, t, Color32::WHITE);
-                    theme::text_at(ui, pos2(other.min.x - 8.0, other.center().y), Align2::RIGHT_CENTER, &format!("or {}", review::file_name(&r.path)), theme::f_mono(10.0), theme::GRAPHITE, 0.3);
+                    theme::text_at(
+                        ui,
+                        pos2(other.min.x - 8.0, other.center().y),
+                        Align2::RIGHT_CENTER,
+                        &format!("or {}", review::file_name(&r.path)),
+                        theme::f_mono(10.0),
+                        theme::GRAPHITE,
+                        0.3,
+                    );
                     if act(ui, "Use the other", 132.0) {
                         m.swap();
                         changed = true;
@@ -495,7 +531,10 @@ fn results(app: &mut BestOfBurstApp, rv: &mut Review, ui: &mut Ui, p: Pal, nav: 
                     m.verdict = Verdict::Found;
                     changed = true;
                 }
-            } else if m.verdict == Verdict::NotFound && m.best.as_ref().is_some_and(|b| b.similarity >= find::CHECK_MIN) && act(ui, "Undo", 72.0) {
+            } else if m.verdict == Verdict::NotFound
+                && m.best.as_ref().is_some_and(|b| b.similarity >= find::CHECK_MIN)
+                && act(ui, "Undo", 72.0)
+            {
                 m.verdict = Verdict::Check;
                 changed = true;
             }

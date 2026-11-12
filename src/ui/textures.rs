@@ -34,10 +34,28 @@ enum Kind {
 #[derive(Clone)]
 enum Job {
     /// `src` is the original photo, read for its orientation (cached thumbnails are not rotated).
-    Thumb { key: String, path: PathBuf, src: Option<(PathBuf, Format)> },
-    Preview { key: String, path: PathBuf, format: Format },
-    Crop { key: String, path: PathBuf, format: Format, center: [f32; 2] },
-    Full { key: String, path: PathBuf, format: Format, max_side: u32 },
+    Thumb {
+        key: String,
+        path: PathBuf,
+        src: Option<(PathBuf, Format)>,
+    },
+    Preview {
+        key: String,
+        path: PathBuf,
+        format: Format,
+    },
+    Crop {
+        key: String,
+        path: PathBuf,
+        format: Format,
+        center: [f32; 2],
+    },
+    Full {
+        key: String,
+        path: PathBuf,
+        format: Format,
+        max_side: u32,
+    },
 }
 
 struct Done {

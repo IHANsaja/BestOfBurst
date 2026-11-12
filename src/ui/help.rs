@@ -48,7 +48,12 @@ pub fn toggle(ui: &mut Ui, id: &str, label: &str) -> bool {
     let fill = if open || resp.hovered() { theme::CYAN } else { egui::Color32::TRANSPARENT };
     let fg = if open || resp.hovered() { theme::PAPER_WHITE } else { color };
     ui.painter().rect_filled(rect, 3.0, fill);
-    ui.painter().rect_stroke(rect, 3.0, egui::Stroke::new(1.5, if open || resp.hovered() { theme::CYAN } else { color }), egui::StrokeKind::Inside);
+    ui.painter().rect_stroke(
+        rect,
+        3.0,
+        egui::Stroke::new(1.5, if open || resp.hovered() { theme::CYAN } else { color }),
+        egui::StrokeKind::Inside,
+    );
     theme::text_at(ui, rect.center(), egui::Align2::CENTER_CENTER, "?", theme::f_mono_semi(12.0), fg, 0.0);
     theme::focus_ring(ui, &resp);
     if resp.clicked() {

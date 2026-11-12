@@ -14,14 +14,14 @@ use anyhow::{bail, Context, Result};
 use rayon::prelude::*;
 
 use crate::analyze::{analyze, capture_ms, dhash, dhash_from_cells, finish, fnv1a_hex, write_thumb};
-use crate::gpu;
-use crate::stats::{self, STATS};
-use std::sync::atomic::Ordering::Relaxed;
 use crate::decode::{self, Decoder};
+use crate::gpu;
 use crate::output::{self, OutputOptions, OutputSummary};
 use crate::rank::{self, Keep, Preset, Ranking};
 use crate::scan::{self, Format, ScanItem};
 use crate::state::{FileEntry, State};
+use crate::stats::{self, STATS};
+use std::sync::atomic::Ordering::Relaxed;
 
 const SAVE_EVERY: usize = 200;
 const SAVE_INTERVAL: Duration = Duration::from_secs(15);
@@ -106,7 +106,11 @@ pub fn default_threads() -> usize {
 #[derive(Clone, Debug)]
 pub enum Event {
     Warning(String),
-    Scanned { total: usize, new: usize, already: usize },
+    Scanned {
+        total: usize,
+        new: usize,
+        already: usize,
+    },
     Progress {
         done: usize,
         total: usize,
@@ -115,7 +119,10 @@ pub enum Event {
         last: Option<String>,
         last_thumb: Option<PathBuf>,
     },
-    Failed { path: String, error: String },
+    Failed {
+        path: String,
+        error: String,
+    },
     /// Which engine the run uses, in words.
     Engine(String),
 }
@@ -347,24 +354,14 @@ pub fn analyze_folder(cfg: &RunConfig, stop: &Arc<AtomicBool>, mut on_event: imp
                 let failed = !entry.is_done();
                 if failed {
                     outcome.failed_now += 1;
-                    on_event(Event::Failed {
-                        path: item.rel.clone(),
-                        error: entry.error.clone().unwrap_or_default(),
-                    });
+                    on_event(Event::Failed { path: item.rel.clone(), error: entry.error.clone().unwrap_or_default() });
                 }
                 let thumb = entry.thumb.as_ref().map(|t| cfg.out.join(t));
                 outcome.state.files.insert(item.rel.clone(), entry);
                 let secs = started.elapsed().as_secs_f32().max(0.001);
                 let per_sec = done as f32 / secs;
                 let eta_s = (per_sec > 0.0).then(|| ((total_new - done) as f32 / per_sec).round() as u32);
-                on_event(Event::Progress {
-                    done,
-                    total: total_new,
-                    per_sec,
-                    eta_s,
-                    last: Some(item.rel),
-                    last_thumb: thumb,
-                });
+                on_event(Event::Progress { done, total: total_new, per_sec, eta_s, last: Some(item.rel), last_thumb: thumb });
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => break,

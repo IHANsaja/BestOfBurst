@@ -109,7 +109,11 @@ fn watermarked_previews_find_their_originals() {
         assert_eq!(m.best.as_ref().map(|b| b.path.as_str()), Some(name.as_str()), "{:?} matched wrongly: {m:?}", m.query);
         assert_ne!(m.verdict, Verdict::NotFound, "{m:?}");
     }
-    assert!(report.count(Verdict::Found) >= originals.len() - 3, "only the burst may need a look: {:?}", report.matches.iter().map(|m| m.verdict).collect::<Vec<_>>());
+    assert!(
+        report.count(Verdict::Found) >= originals.len() - 3,
+        "only the burst may need a look: {:?}",
+        report.matches.iter().map(|m| m.verdict).collect::<Vec<_>>()
+    );
     let wm = report.watermarks.get(&Shape::Landscape).expect("the watermark is learned from the matches");
     assert!(wm.coverage > 0.03 && wm.coverage < 0.5, "coverage {}", wm.coverage);
 }
@@ -120,9 +124,9 @@ fn burst_frames_are_told_apart() {
     let originals = shoot();
     let index = Index::from_images(&originals);
     let mut queries = Vec::new();
-    for k in 10..13 {
+    for (k, original) in originals.iter().enumerate().take(13).skip(10) {
         let q = dir.join(format!("pick{k}.jpg"));
-        save(&preview(&originals[k].1, 600, false), &q, 80);
+        save(&preview(&original.1, 600, false), &q, 80);
         queries.push(q);
     }
     let report = run(&index, &queries);
@@ -269,7 +273,7 @@ fn found_originals_are_delivered_from_a_real_run() {
     }
     save(&photo(4242), &sent.join("other-shoot.jpg"), 80);
 
-    let queries = find::collect_queries(&[sent.clone()]);
+    let queries = find::collect_queries(std::slice::from_ref(&sent));
     assert_eq!(queries.len(), 5);
     let index = Index::build(&state, &out);
     assert_eq!(index.len(), originals.len());
@@ -282,7 +286,8 @@ fn found_originals_are_delivered_from_a_real_run() {
     let s = find::write_found(&dir, &out, &report.matches, false).unwrap();
     assert!(s.errors.is_empty());
     assert_eq!(s.written, 3, "two previews of one photo deliver it once");
-    let mut names: Vec<String> = std::fs::read_dir(out.join(find::FOUND_DIR)).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+    let mut names: Vec<String> =
+        std::fs::read_dir(out.join(find::FOUND_DIR)).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
     names.sort();
     assert_eq!(names, ["IMG_0101.jpg", "IMG_0104.jpg", "IMG_0108.jpg"]);
     let csv = std::fs::read_to_string(out.join("found.csv")).unwrap();
@@ -362,10 +367,16 @@ fn clean_previews_come_out_of_a_match() {
     // No culling was run on this folder: the index is read straight from the photos.
     let index = Index::open(&dir, &stop, |_, _| {});
     assert_eq!(index.len(), originals.len());
-    let report = find::find_originals(&index, &find::collect_queries(&[sent.clone()]), None, &stop, |_, _| {});
+    let report = find::find_originals(&index, &find::collect_queries(std::slice::from_ref(&sent)), None, &stop, |_, _| {});
     let out = scratch("clean-run-out");
     let s = bestofburst::clean::clean_all(&dir, &report.matches, &out, &stop, |_, _| {}).unwrap();
-    assert_eq!((s.written, s.unmatched), (5, 1), "{:?} {:?}", s.errors, report.matches.iter().map(|m| m.best.as_ref().map(|b| (b.path.clone(), b.turns, b.crop, b.similarity))).collect::<Vec<_>>());
+    assert_eq!(
+        (s.written, s.unmatched),
+        (5, 1),
+        "{:?} {:?}",
+        s.errors,
+        report.matches.iter().map(|m| m.best.as_ref().map(|b| (b.path.clone(), b.turns, b.crop, b.similarity))).collect::<Vec<_>>()
+    );
     assert!(out.join("proof 3.jpg").exists());
     let data = std::fs::read(out.join("proof 3.jpg")).unwrap();
     let img = decode::decode_jpeg_bytes(&data).unwrap();

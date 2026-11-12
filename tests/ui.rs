@@ -77,10 +77,8 @@ fn window_flow() {
     engine::rank_and_output(&mut state, &cfg).unwrap();
 
     let folder = dir.clone();
-    let mut h = Harness::builder()
-        .with_size(egui::vec2(1440.0, 900.0))
-        .wgpu()
-        .build_eframe(move |cc| BestOfBurstApp::new(cc, Some(folder)));
+    let mut h =
+        Harness::builder().with_size(egui::vec2(1440.0, 900.0)).wgpu().build_eframe(move |cc| BestOfBurstApp::new(cc, Some(folder)));
 
     // Home: counts arrive from a background scan; nothing new -> open the contact sheet.
     settle(&mut h, |a| a.folder_info.is_some());
@@ -248,10 +246,8 @@ fn find_originals_flow() {
     save_jpeg(&checkerboard(600, 400, 40), &sent.join("holiday.jpg"));
 
     let folder = dir.clone();
-    let mut h = Harness::builder()
-        .with_size(egui::vec2(1440.0, 900.0))
-        .wgpu()
-        .build_eframe(move |cc| BestOfBurstApp::new(cc, Some(folder)));
+    let mut h =
+        Harness::builder().with_size(egui::vec2(1440.0, 900.0)).wgpu().build_eframe(move |cc| BestOfBurstApp::new(cc, Some(folder)));
     settle(&mut h, |a| a.folder_info.is_some());
     h.key_press(Key::Enter);
     settle(&mut h, |a| a.screen == Screen::Review);
@@ -285,10 +281,7 @@ fn find_originals_flow() {
 /// Without a folder the window opens on the start page, with both tools one key away.
 #[test]
 fn start_page_offers_both_tools() {
-    let mut h = Harness::builder()
-        .with_size(egui::vec2(1440.0, 900.0))
-        .wgpu()
-        .build_eframe(|cc| BestOfBurstApp::new(cc, None));
+    let mut h = Harness::builder().with_size(egui::vec2(1440.0, 900.0)).wgpu().build_eframe(|cc| BestOfBurstApp::new(cc, None));
     settle(&mut h, |_| true);
     assert_eq!(screen(&h), Screen::Start);
     snapshot(&mut h, "0_start");

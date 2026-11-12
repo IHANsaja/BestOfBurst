@@ -22,7 +22,11 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
 
 fn back(rv: &mut Review) -> Nav {
     rv.cmp = None;
-    if rv.focus.is_some() { Nav::To(Screen::Focus) } else { Nav::To(Screen::Review) }
+    if rv.focus.is_some() {
+        Nav::To(Screen::Focus)
+    } else {
+        Nav::To(Screen::Review)
+    }
 }
 
 /// A drag on screen, as a move across the texture of a photo turned `turns` quarters clockwise.
