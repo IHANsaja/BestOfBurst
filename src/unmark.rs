@@ -117,7 +117,7 @@ fn morph(m: &[bool], w: usize, h: usize, grow: bool) -> Vec<bool> {
     out
 }
 
-fn morph_n(m: &[bool], w: usize, h: usize, grow: bool, n: usize) -> Vec<bool> {
+pub(crate) fn morph_n(m: &[bool], w: usize, h: usize, grow: bool, n: usize) -> Vec<bool> {
     let mut v = m.to_vec();
     for _ in 0..n {
         v = morph(&v, w, h, grow);

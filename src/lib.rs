@@ -9,6 +9,7 @@ pub mod engine;
 pub mod faces;
 pub mod find;
 pub mod gpu;
+pub mod inpaint;
 pub mod output;
 pub mod rank;
 pub mod scan;
