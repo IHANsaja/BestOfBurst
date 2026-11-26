@@ -1,7 +1,8 @@
 # Builds every release file into installer\Output:
 #   BestOfBurst-<version>-Setup-64bit.exe     BestOfBurst-<version>-Portable-64bit.exe
 #   BestOfBurst-<version>-Setup-32bit.exe     BestOfBurst-<version>-Portable-32bit.exe
-# Needs Rust (with the i686-pc-windows-msvc target) and Inno Setup 6.
+# Needs Rust (with the i686-pc-windows-msvc target), Inno Setup 6, and the AI model in
+# assets\models (run scripts\fetch-lama.ps1 once).
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root

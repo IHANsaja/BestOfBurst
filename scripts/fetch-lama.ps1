@@ -1,9 +1,10 @@
-# Downloads the LaMa inpainting model used by the watermark remover's AI edge clean-up
-# (src/inpaint.rs) into %LOCALAPPDATA%\BestOfBurst\models\ and checks its SHA-256.
-# The model is Apache-2.0, from https://huggingface.co/Carve/LaMa-ONNX (about 200 MB).
-# Pass -Dest <folder> to put it elsewhere (for example a "models" folder beside bestofburst.exe).
+# For building BestOfBurst, once per checkout: downloads the LaMa inpainting model used by the
+# watermark remover's AI edge clean-up (src/inpaint.rs) into assets\models\ and checks its
+# SHA-256. `cargo build` then builds it into bestofburst.exe; people who use the program
+# download nothing. The model is Apache-2.0, from https://huggingface.co/Carve/LaMa-ONNX
+# (about 200 MB), and is not kept in git.
 param(
-    [string]$Dest = (Join-Path $env:LOCALAPPDATA "BestOfBurst\models")
+    [string]$Dest = (Join-Path (Split-Path $PSScriptRoot -Parent) "assets\models")
 )
 $ErrorActionPreference = "Stop"
 $url = "https://huggingface.co/Carve/LaMa-ONNX/resolve/main/lama_fp32.onnx"
