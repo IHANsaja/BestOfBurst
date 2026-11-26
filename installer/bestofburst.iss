@@ -7,7 +7,7 @@
 
 #define AppName "BestOfBurst"
 #ifndef AppVersion
-  #define AppVersion "0.3.1"
+  #define AppVersion "0.4.0"
 #endif
 #ifndef Arch
   #define Arch "64"
