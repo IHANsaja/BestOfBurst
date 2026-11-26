@@ -1,0 +1,22 @@
+[package]
+name = "license-core"
+version = "0.1.0"
+edition = "2021"
+description = "License key format and Ed25519 verification shared by BestOfBurst and its (private) keygen."
+license-file = "../../LICENSE"
+publish = false
+
+[lib]
+name = "license_core"
+path = "src/lib.rs"
+
+[features]
+# Default is verify-only. The shipped app enables ONLY this: it can check a key
+# but has no code path that can mint one. The private keygen enables "sign".
+default = []
+sign = ["ed25519-dalek/rand_core"]
+
+[dependencies]
+# verify_strict + from_bytes are enough for the app; signing is gated by "sign".
+ed25519-dalek = { version = "2.2.0", default-features = false, features = ["std"] }
+sha2 = "0.10.9"

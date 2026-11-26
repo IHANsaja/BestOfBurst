@@ -48,7 +48,7 @@ pub fn start(app: &mut BestOfBurstApp, ctx: &egui::Context) {
     rs.running = true;
     rs.result = None;
     rs.learned = originals.is_none();
-    let use_ai = rs.learned && !rs.ai_off && inpaint::find_model().is_some();
+    let use_ai = rs.learned && !rs.ai_off;
     rs.stage = Arc::new(AtomicUsize::new(0));
     rs.progress = Arc::new((AtomicUsize::new(0), AtomicUsize::new(0)));
     rs.stop = Arc::new(AtomicBool::new(false));
@@ -69,7 +69,7 @@ pub fn start(app: &mut BestOfBurstApp, ctx: &egui::Context) {
                 let ai = if use_ai {
                     stage.store(3, Ordering::Relaxed);
                     tick(0, 0);
-                    inpaint::shared().ok().flatten()
+                    inpaint::shared().ok()
                 } else {
                     None
                 };
@@ -304,15 +304,9 @@ pub fn show(app: &mut BestOfBurstApp, ui: &mut Ui) {
         });
         if app.remover.originals.is_none() {
             ui.add_space(14.0);
-            let model = inpaint::find_model();
-            let mut on = model.is_some() && !app.remover.ai_off;
-            let desc = if model.is_some() {
-                "Paints over the faint outline the watermark's edge can leave, on this computer, offline. Much slower: several minutes for each big photo."
-            } else {
-                "Needs the free LaMa model (about 200 MB): run scripts\\fetch-lama.ps1, or put lama_fp32.onnx in a models folder beside BestOfBurst or in %LOCALAPPDATA%\\BestOfBurst\\models."
-            };
-            let path = model.as_ref().map(|p| p.display().to_string());
-            if theme::checklist_row(ui, &mut on, model.is_none() || app.remover.running, "Clean edges with AI", desc, path.as_deref()) {
+            let mut on = !app.remover.ai_off;
+            let desc = "Paints over the faint outline the watermark's edge can leave, with the built-in AI model, on this computer, offline. Much slower: several minutes for each big photo.";
+            if theme::checklist_row(ui, &mut on, app.remover.running, "Clean edges with AI", desc, None) {
                 app.remover.ai_off = !on;
             }
         }

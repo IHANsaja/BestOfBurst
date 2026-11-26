@@ -350,11 +350,7 @@ fn removes_a_learned_watermark_and_ai_cleans_its_outline() {
     println!("classical edges: {classical}");
     assert!(classical.psnr > marked_psnr + 3.0, "removing the mark helps: {:.2} -> {:.2}", marked_psnr, classical.psnr);
 
-    if inpaint::find_model().is_none() {
-        println!("SKIPPED the AI part: {} is not installed (run scripts\\fetch-lama.ps1).", inpaint::MODEL_FILE);
-        return;
-    }
-    let lama = inpaint::shared().expect("load the AI model").expect("model present");
+    let lama = inpaint::shared().expect("load the built-in AI model");
     let ai_dir = tmp.join("ai");
     let (_, s) = unmark::unmark_all(&paths, &ai_dir, Some(lama), &stop, &stage, |_, _| {}).expect("unmark with AI");
     assert_eq!(s.written, names.len(), "every preview cleaned: {:?}", s.errors);

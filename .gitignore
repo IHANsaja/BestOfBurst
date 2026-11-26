@@ -1,2 +1,18 @@
 /target
 /installer/Output
+# The LaMa model (200 MB): fetched by scripts/fetch-lama.ps1, built into the exe.
+/assets/models/lama_fp32.onnx
+/assets/models/*.part
+
+# ---- Licensing: PRIVATE. Never commit the keygen or any signing key. ----
+# The keygen holds the Ed25519 private key and is the only thing that can mint
+# license keys. It must never reach GitHub or any customer machine.
+/crates/keygen/
+*.key
+signing_key.bin
+# A locally stored license key, if one is ever written next to the repo.
+/license.key
+# Build caches from running a sub-crate standalone (e.g. `cargo test --manifest-path
+# crates/license-core/Cargo.toml`), which the anchored /target above does not cover.
+crates/*/target/
+crates/license-core/Cargo.lock

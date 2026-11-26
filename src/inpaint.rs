@@ -11,30 +11,19 @@
 //! vanish into one blurry pixel. Instead the areas to paint are covered by overlapping 512 px
 //! tiles at the photo's own resolution, and only the painted pixels are put back.
 //!
-//! The model (`lama_fp32.onnx`, about 200 MB, Apache-2.0) is not built in. It is looked for in a
-//! `models` folder beside the program and in `%LOCALAPPDATA%\BestOfBurst\models\`
-//! (`scripts/fetch-lama.ps1` puts it there), and its SHA-256 is checked before use. Without it
-//! everything works as before, with the classical fill.
+//! The model (`lama_fp32.onnx`, about 200 MB, Apache-2.0) is built into the program (the
+//! `lama-model` crate), so there is nothing to download or install. If it cannot be loaded
+//! (not enough memory, say), the classical fill does the edges.
 
-use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 use anyhow::{anyhow, bail, Context, Result};
 use rayon::prelude::*;
-use sha2::{Digest, Sha256};
 use tract_onnx::prelude::*;
 
 use crate::decode::RgbImage;
 use crate::unmark::morph_n;
-
-/// The model file, as published at huggingface.co/Carve/LaMa-ONNX.
-pub const MODEL_FILE: &str = "lama_fp32.onnx";
-/// Its size in bytes and SHA-256 (from the Git LFS pointer of that repository).
-pub const MODEL_BYTES: u64 = 208_044_816;
-pub const MODEL_SHA256: &str = "1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6";
-/// Where to get it.
-pub const MODEL_URL: &str = "https://huggingface.co/Carve/LaMa-ONNX/resolve/main/lama_fp32.onnx";
 
 // The model's interface (checked by loading it; the model card does not spell it out):
 // - input `image`: float32 [1, 3, 512, 512], RGB, values 0..1;
@@ -83,47 +72,12 @@ pub struct Lama {
     plan: Plan,
 }
 
-/// Where the model is looked for, in order.
-pub fn model_paths() -> Vec<PathBuf> {
-    let mut v = Vec::new();
-    if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
-        v.push(dir.join("models").join(MODEL_FILE));
-    }
-    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
-        v.push(PathBuf::from(local).join("BestOfBurst").join("models").join(MODEL_FILE));
-    }
-    v
-}
-
-/// The model file, when one of the right size is in place (quick: the hash is checked on load).
-pub fn find_model() -> Option<PathBuf> {
-    model_paths().into_iter().find(|p| std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.len() == MODEL_BYTES))
-}
-
-fn sha256_file(path: &Path) -> Result<String> {
-    use std::io::Read;
-    let mut f = std::fs::File::open(path).with_context(|| format!("cannot read {}", path.display()))?;
-    let mut hasher = Sha256::new();
-    let mut buf = vec![0u8; 1 << 20];
-    loop {
-        let n = f.read(&mut buf)?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
-    Ok(hasher.finalize().iter().map(|b| format!("{b:02x}")).collect())
-}
-
 impl Lama {
-    /// Check the file's hash, then load it (about 20 seconds).
-    pub fn load(path: &Path) -> Result<Lama> {
-        let hash = sha256_file(path)?;
-        if hash != MODEL_SHA256 {
-            bail!("{} is not the expected model (its SHA-256 is {hash})", path.display());
-        }
+    /// Load the built-in model (about 20 seconds).
+    pub fn load() -> Result<Lama> {
+        let mut onnx = lama_model::ONNX;
         let model = tract_onnx::onnx()
-            .model_for_path(path)?
+            .model_for_read(&mut onnx)?
             .with_input_fact(0, f32::fact([1, 3, TILE, TILE]).into())?
             .with_input_fact(1, f32::fact([1, 1, TILE, TILE]).into())?
             .into_optimized()?
@@ -145,18 +99,16 @@ impl Lama {
     }
 }
 
-/// The model, loaded once and kept: `Ok(None)` when it is not installed, `Err` when it is
-/// there but cannot be used (wrong file, failed to load).
-pub fn shared() -> Result<Option<&'static Lama>, String> {
+/// The model, loaded once and kept; `Err` when it cannot be loaded.
+pub fn shared() -> Result<&'static Lama, String> {
     static M: OnceLock<Lama> = OnceLock::new();
     if let Some(m) = M.get() {
-        return Ok(Some(m));
+        return Ok(m);
     }
-    let Some(path) = find_model() else { return Ok(None) };
-    let lama = std::panic::catch_unwind(|| Lama::load(&path))
+    let lama = std::panic::catch_unwind(Lama::load)
         .unwrap_or_else(|_| Err(anyhow!("the AI model crashed while loading")))
         .map_err(|e| format!("{e:#}"))?;
-    Ok(Some(M.get_or_init(|| lama)))
+    Ok(M.get_or_init(|| lama))
 }
 
 /// Where the un-blended photo can be trusted for its smooth tone: away (by `CLEAR` pixels)
@@ -562,6 +514,13 @@ mod tests {
                 (r + 0.5 - d).clamp(0.0, 1.0)
             })
             .collect()
+    }
+
+    #[test]
+    fn the_built_in_model_is_the_published_one() {
+        use sha2::{Digest, Sha256};
+        let hash: String = Sha256::digest(lama_model::ONNX).iter().map(|b| format!("{b:02x}")).collect();
+        assert_eq!(hash, lama_model::SHA256);
     }
 
     #[test]

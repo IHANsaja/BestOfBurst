@@ -14,7 +14,8 @@ use serde::{Deserialize, Serialize};
 use super::review::Review;
 use super::textures::Textures;
 use super::theme::{self, Pal};
-use super::{compare, corner, done, find, focus, help, home, marks, progress, remover, review, start, viewer};
+use super::{activate, compare, corner, done, find, focus, help, home, marks, progress, remover, review, start, viewer};
+use crate::license::License;
 use crate::engine::EngineChoice;
 use crate::engine::{self, Event, RunConfig};
 use crate::output::OutputSummary;
@@ -29,6 +30,8 @@ pub const HEADER_H: f32 = 56.0;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Screen {
+    /// The activation gate, shown before anything else until a valid license key is entered.
+    Activate,
     /// The first page: choose the best shots, or remove watermarks.
     Start,
     /// Remove watermarks, on its own.
@@ -177,6 +180,11 @@ pub struct BestOfBurstApp {
     fullscreen: bool,
     pub find: find::FindState,
     pub remover: remover::RemoverState,
+    /// The verified license, if the app has been activated. `None` forces the activation gate.
+    pub license: Option<License>,
+    /// The key being typed on the activation screen, and the last error shown there.
+    pub activate_input: String,
+    pub activate_error: Option<String>,
 }
 
 /// Writes `state.json` on its own thread, always the newest snapshot.
@@ -244,17 +252,30 @@ impl BestOfBurstApp {
             fullscreen: false,
             find: find::FindState::default(),
             remover: remover::RemoverState::default(),
+            license: crate::license::active_license(),
+            activate_input: String::new(),
+            activate_error: None,
         };
-        if folder.is_none() {
+        // The gate comes before everything. Only a stored, still-valid key lets the app open
+        // to its normal first screen.
+        if app.license.is_none() {
+            app.screen = Screen::Activate;
+        } else if folder.is_none() {
             app.screen = Screen::Start;
         }
         // Start the graphics card in the background so Home can show it without waiting.
         std::thread::spawn(|| {
             let _ = crate::gpu::get();
         });
+        // A folder passed on the command line is only honored once activated; otherwise it is
+        // remembered and applied when the gate is cleared.
         if let Some(f) = folder {
             let f = std::path::absolute(&f).unwrap_or(f);
-            app.choose_folder(f, &cc.egui_ctx);
+            if app.license.is_some() {
+                app.choose_folder(f, &cc.egui_ctx);
+            } else {
+                app.folder = Some(f);
+            }
         }
         app
     }
@@ -912,6 +933,13 @@ impl eframe::App for BestOfBurstApp {
         }
         self.textures.poll(&ctx); // uploads finished thumbnail decodes
 
+        // The licensing invariant, re-asserted every frame: with no verified license, the only
+        // reachable screen is the gate. This is not merely the initial screen — patching the
+        // startup path is not enough to get past it, because it is re-checked here each frame.
+        if self.license.is_none() && self.screen != Screen::Activate {
+            self.screen = Screen::Activate;
+        }
+
         if let Some((_, _, at)) = &self.message {
             if at.elapsed() > Duration::from_secs(10) {
                 self.message = None;
@@ -938,7 +966,7 @@ impl eframe::App for BestOfBurstApp {
 
         // Done is always the light table; Processing and Focus are always the darkroom.
         let surface_night = match self.screen {
-            Screen::Done | Screen::Find | Screen::Corner | Screen::Help | Screen::Start | Screen::Remover => false,
+            Screen::Done | Screen::Find | Screen::Corner | Screen::Help | Screen::Start | Screen::Remover | Screen::Activate => false,
             Screen::Progress | Screen::Focus | Screen::Compare | Screen::Viewer => true,
             _ => self.settings.night,
         };
@@ -956,6 +984,7 @@ impl eframe::App for BestOfBurstApp {
         }
 
         match self.screen {
+            Screen::Activate => activate::show(self, ui),
             Screen::Start => start::show(self, ui),
             Screen::Remover => remover::show(self, ui),
             Screen::Home => home::show(self, ui),

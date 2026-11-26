@@ -66,7 +66,7 @@ enum Cmd {
         /// Where the cleaned photos go [default: a `watermark removed` folder beside the first photo].
         #[arg(long)]
         out: Option<PathBuf>,
-        /// Do not clean the mark's edge with the AI model, even when it is installed.
+        /// Do not clean the mark's edge with the built-in AI model.
         #[arg(long)]
         no_ai: bool,
     },
@@ -501,20 +501,12 @@ fn cmd_unmark(sent: &[PathBuf], out: Option<PathBuf>, no_ai: bool) -> Result<()>
     let ai = if no_ai {
         None
     } else {
-        match inpaint::find_model() {
-            None => {
-                println!("  (AI edge clean-up off: {} not found; run scripts\\fetch-lama.ps1 to get it)", inpaint::MODEL_FILE);
+        println!("Loading the AI model...");
+        match inpaint::shared() {
+            Ok(m) => Some(m),
+            Err(e) => {
+                eprintln!("  AI edge clean-up off: {e}");
                 None
-            }
-            Some(p) => {
-                println!("Loading the AI model {}...", p.display());
-                match inpaint::shared() {
-                    Ok(m) => m,
-                    Err(e) => {
-                        eprintln!("  AI edge clean-up off: {e}");
-                        None
-                    }
-                }
             }
         }
     };
